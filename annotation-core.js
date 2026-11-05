@@ -24,6 +24,8 @@
   const DATASET_SCHEMA = 'label-observations-v1';
   const SESSION_SCHEMA = 'voice-label-session-v1';
   const BACKUP_SCHEMA = 'voice-label-session-backup-v1';
+  const TOOL_VOCAB_VERSION = 'voice-label-vocab-0.2';
+  const EXTRA_VARIANTS = Object.freeze(['极品少女御姐', '极御姐']);
 
   // 与 taxonomy-research/schema.json 保持一致；测试会比对，避免词表漂移。
   const TAXONOMY = Object.freeze({
@@ -61,7 +63,7 @@
   const CSV_EXTRA_COLUMNS = Object.freeze([
     'custom_tags', 'unsure', 'label_confirmed', 'fingerprint', 'file_name',
     'relative_path', 'duration_seconds', 'size_bytes', 'note', 'heard_audio',
-    'confirmed_at', 'updated_at'
+    'confirmed_at', 'updated_at', 'primary_voice', 'primary_code', 'primary_seq'
   ]);
   const CSV_COLUMNS = Object.freeze([...CSV_CANONICAL_COLUMNS, ...CSV_EXTRA_COLUMNS]);
 
@@ -158,6 +160,9 @@
       consent_at: toTimestampOr(meta.consent_at, ''),
       consent_version: cleanString(meta.consent_version, 40),
       labels: emptyLabels(),
+      primary: '',
+      primary_seq: null,
+      primary_seq_of: '',
       voice_mode: 'unknown',
       unsure: false,
       note: '',
@@ -227,6 +232,7 @@
       taxonomy_version: TAXONOMY.version,
       created_at: timestamp,
       updated_at: timestamp,
+      primary_counters: {},
       clips: []
     };
   }
@@ -263,6 +269,9 @@
       consent_at: toTimestampOr(raw.consent_at, ''),
       consent_version: cleanString(raw.consent_version, 40),
       labels,
+      primary: TAXONOMY.parents.includes(raw.primary) ? raw.primary : '',
+      primary_seq: Number.isSafeInteger(raw.primary_seq) && raw.primary_seq > 0 ? raw.primary_seq : null,
+      primary_seq_of: TAXONOMY.parents.includes(raw.primary_seq_of) ? raw.primary_seq_of : '',
       voice_mode: voiceMode,
       unsure: raw.unsure === true,
       note: cleanString(raw.note, 1000),
@@ -291,6 +300,35 @@
         clips.push(clip);
       }
     }
+    const counters = {};
+    for (const parent of TAXONOMY.parents) {
+      const value = raw.primary_counters && raw.primary_counters[parent];
+      counters[parent] = Number.isSafeInteger(value) && value > 0 ? value : 0;
+    }
+    for (const clip of clips) {
+      if (clip.primary_seq_of && clip.primary_seq) counters[clip.primary_seq_of] = Math.max(counters[clip.primary_seq_of], clip.primary_seq);
+    }
+    const allocated = new Set();
+    for (const clip of [...clips].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+      if (!clip.primary_seq_of || !clip.primary_seq) {
+        clip.primary_seq = null;
+        clip.primary_seq_of = '';
+        if (clip.primary) {
+          clip.primary_seq_of = clip.primary;
+          clip.primary_seq = ++counters[clip.primary];
+          allocated.add(clip.primary + ':' + clip.primary_seq);
+        }
+        continue;
+      }
+      const key = clip.primary_seq_of + ':' + clip.primary_seq;
+      if (allocated.has(key)) {
+        // Keep the earliest allocation; repair duplicate codes without dropping a label.
+        counters[clip.primary_seq_of] = Math.max(counters[clip.primary_seq_of], clip.primary_seq);
+        clip.primary_seq = ++counters[clip.primary_seq_of];
+      }
+      allocated.add(clip.primary_seq_of + ':' + clip.primary_seq);
+      counters[clip.primary_seq_of] = Math.max(counters[clip.primary_seq_of], clip.primary_seq);
+    }
     return {
       schema: SESSION_SCHEMA,
       name: cleanString(raw.name, 200) || '默认会话',
@@ -298,6 +336,7 @@
       taxonomy_version: cleanString(raw.taxonomy_version, 100) || TAXONOMY.version,
       created_at: toTimestampOr(raw.created_at, timestamp),
       updated_at: toTimestampOr(raw.updated_at, timestamp),
+      primary_counters: counters,
       clips
     };
   }
@@ -309,7 +348,7 @@
 
   function hasAnyAnnotation(clip) {
     if (!clip) return false;
-    return hasLabels(clip) || clip.unsure === true || Boolean(clip.note && clip.note.trim()) ||
+    return Boolean(clip.primary) || hasLabels(clip) || clip.unsure === true || Boolean(clip.note && clip.note.trim()) ||
       (clip.voice_mode && clip.voice_mode !== 'unknown');
   }
 
@@ -337,10 +376,53 @@
     if (clip.confirmed) return { ok: false, reason: '该条已经确认；如需修改请先重新编辑。' };
     if (!cleanString(annotator, 200)) return { ok: false, reason: '请先填写标注代号。' };
     if (clip.heard_audio !== true) return { ok: false, reason: '请先完整播放到结尾。' };
-    if (!hasLabels(clip) && clip.unsure !== true) {
-      return { ok: false, reason: '至少选择一个标签，或勾选“无法确定”。' };
+    if ((!clip.primary || clip.primary_seq_of !== clip.primary || !clip.primary_seq) && clip.unsure !== true) {
+      return { ok: false, reason: '请选择一个主音（会立即编号），或勾选“无法确定”。' };
     }
     return { ok: true, reason: '' };
+  }
+
+  function primaryCode(clip) {
+    return clip && clip.primary && clip.primary_seq_of === clip.primary && clip.primary_seq
+      ? clip.primary + '音-' + String(clip.primary_seq).padStart(3, '0') : '';
+  }
+
+  function setPrimary(session, clip, name, now) {
+    if (!session || !clip || clip.confirmed || (name && !TAXONOMY.parents.includes(name))) return false;
+    const chosen = clip.primary === name ? '' : name;
+    if (chosen && (clip.primary_seq_of !== chosen || !clip.primary_seq)) {
+      if (!session.primary_counters) session.primary_counters = {};
+      const previous = Number(session.primary_counters[chosen]) || 0;
+      const existing = Array.isArray(session.clips) ? session.clips.reduce((max, item) =>
+        item.primary_seq_of === chosen ? Math.max(max, Number(item.primary_seq) || 0) : max, 0) : 0;
+      clip.primary_seq = Math.max(previous, existing) + 1;
+      session.primary_counters[chosen] = clip.primary_seq;
+      clip.primary_seq_of = chosen;
+    }
+    clip.primary = chosen;
+    touchClip(clip, now);
+    return true;
+  }
+
+  function confirmClip(session, clip, annotator, now) {
+    const result = canConfirm(clip, annotator);
+    if (!result.ok) return result;
+    session.annotator = cleanString(annotator, 200);
+    clip.confirmed = true;
+    clip.confirmed_at = now || nowIso();
+    touchClip(clip, clip.confirmed_at);
+    return { ok: true, reason: '' };
+  }
+
+  function groupByPrimary(clips) {
+    const groups = [...TAXONOMY.parents, '未归类'].map((name) => ({ name, clips: [] }));
+    for (const clip of Array.isArray(clips) ? clips : []) {
+      const index = TAXONOMY.parents.indexOf(clip.primary);
+      groups[index < 0 ? groups.length - 1 : index].clips.push(clip);
+    }
+    for (const group of groups) group.clips.sort((a, b) =>
+      (a.primary_seq || Infinity) - (b.primary_seq || Infinity) || a.created_at.localeCompare(b.created_at));
+    return groups;
   }
 
   function touchClip(clip, now) {
@@ -395,6 +477,10 @@
       duration_seconds: clip.duration_seconds,
       size_bytes: clip.size_bytes,
       last_modified: clip.last_modified,
+      primary_voice: clip.primary || '',
+      primary_voice_label: clip.primary ? clip.primary + '音' : '',
+      primary_seq: clip.primary_seq_of === clip.primary && clip.primary ? clip.primary_seq : null,
+      primary_code: primaryCode(clip),
       parent_candidates: [...clip.labels.parents],
       subtype_candidates: [...clip.labels.variants],
       texture_tags: [...clip.labels.textures],
@@ -428,10 +514,11 @@
       schema: DATASET_SCHEMA,
       tool: { name: APP_NAME, version: APP_VERSION },
       taxonomy_version: safeSession.taxonomy_version,
+      tool_vocab_version: TOOL_VOCAB_VERSION,
       taxonomy: {
         version: TAXONOMY.version,
         parents: [...TAXONOMY.parents],
-        variants: [...TAXONOMY.variants],
+        variants: [...TAXONOMY.variants, ...EXTRA_VARIANTS],
         texture_tags: [...TAXONOMY.texture_tags],
         style_tags: [...TAXONOMY.style_tags]
       },
@@ -531,7 +618,10 @@
         clip.note,                               // note
         clip.heard_audio ? 'true' : 'false',     // heard_audio
         clip.confirmed_at || '',                 // confirmed_at
-        clip.updated_at                          // updated_at
+        clip.updated_at,                         // updated_at
+        clip.primary || '',                       // primary_voice (local candidate)
+        primaryCode(clip),                        // primary_code
+        primaryCode(clip) ? clip.primary_seq : '' // primary_seq
       ];
       rows.push(values.map(csvEscape).join(','));
     }
@@ -544,6 +634,8 @@
     DATASET_SCHEMA,
     SESSION_SCHEMA,
     BACKUP_SCHEMA,
+    TOOL_VOCAB_VERSION,
+    EXTRA_VARIANTS,
     TAXONOMY,
     LABEL_GROUPS,
     VOICE_MODES,
@@ -565,6 +657,10 @@
     statusOf,
     countStatuses,
     canConfirm,
+    primaryCode,
+    setPrimary,
+    confirmClip,
+    groupByPrimary,
     toggleLabel,
     addCustomTag,
     removeCustomTag,
