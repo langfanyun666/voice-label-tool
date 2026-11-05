@@ -70,7 +70,10 @@
   .queueItem.current { outline: 2px solid #61dfb0; outline-offset: -2px; }
   .queueButton { width: 100%; text-align: left; background: transparent; padding: 8px 10px; border-radius: 6px; display: block; }
   .queueButton:hover:not(:disabled) { background: #22334d; }
-  .queueName { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
+  .queueName { display: block; overflow-wrap: anywhere; white-space: normal; font-size: .95rem; }
+  .queueGroup { margin: 8px 0; }
+  .queueGroup summary { cursor: pointer; font-weight: 700; padding: 6px; }
+  .queueGroup .queueList { margin: 4px 0 10px 10px; overflow: visible; min-height: 0; }
   .queueSub { display: block; color: #b8c5d7; font-size: .78rem; margin-top: 2px; }
   .queueEmpty { color: #b8c5d7; font-size: .9rem; }
   .clipHead { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -92,7 +95,7 @@
   .inline { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
   .inline input[type="checkbox"] { width: 18px; height: 18px; accent-color: #61dfb0; }
   .inline label { margin: 0; }
-  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; position: sticky; bottom: 0; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); background: var(--panel); z-index: 2; }
   .empty { border: 1px dashed #3a4d69; border-radius: 12px; padding: 28px; text-align: center; color: #b8c5d7; }
   .importZone { border: 2px dashed #3a4d69; border-radius: 12px; padding: 18px; transition: border-color .15s, background .15s; }
   .importZone.dragging { border-color: #61dfb0; background: #1b3344; }
@@ -199,6 +202,7 @@
           <button type="button" data-filter="confirmed">已确认 0</button>
         </div>
       </div>
+      <label class="muted small">主音筛选 <select id="primaryFilter"><option value="all">全部主音</option></select></label>
       <ol id="queueList" class="queueList"></ol>
       <p id="queueEmpty" class="queueEmpty">尚未导入音频。</p>
       <p class="shortcuts">快捷键：← / → 切换音频，空格 播放/暂停（输入框内不生效）。</p>
@@ -216,6 +220,7 @@
         <p id="playHint" class="muted small"></p>
         <p id="reattachHint" class="muted small" hidden>音频未连接：请重新选择相同文件/文件夹，工具会按指纹自动关联；标注与确认状态已保留。</p>
 
+        <div id="primaryArea" class="tagGroup" role="radiogroup" aria-label="主音，单选"></div>
         <div id="tagArea"></div>
 
         <div class="tagGroup">
@@ -249,9 +254,10 @@
           <button id="prevBtn" type="button">← 上一条</button>
           <button id="confirmBtn" type="button" class="primary">确认并下一条</button>
           <button id="reopenBtn" type="button" hidden>重新编辑本条</button>
-          <button id="nextBtn" type="button">下一条 →</button>
+          <button id="nextBtn" type="button">跳过（不确认），下一条 →</button>
         </div>
         <p id="confirmHint" class="muted small"></p>
+        <p id="saveHint" class="muted small" role="status"></p>
         <p id="clipMessage" class="okText" role="status"></p>
       </div>
     </section>
@@ -268,6 +274,7 @@
       <button id="exportBackupBtn" type="button">导出会话备份（仅标签）</button>
       <button id="exportFullBackupBtn" type="button">导出完整备份（声音 + 标签）</button>
       <button id="importBackupBtn" type="button">导入会话备份</button>
+      <button id="migrateLegacyBtn" type="button">预览旧父类迁移</button>
       <input id="backupInput" class="hiddenInput" type="file" accept=".json,application/json">
     </div>
     <p id="exportStatus" class="muted small" role="status"></p>
@@ -302,6 +309,7 @@
     progressText: $('progressText'),
     progressBar: $('progressBar'),
     filters: $('filters'),
+    primaryFilter: $('primaryFilter'),
     queueList: $('queueList'),
     queueEmpty: $('queueEmpty'),
     emptyState: $('emptyState'),
@@ -313,6 +321,7 @@
     playHint: $('playHint'),
     playHint: $('playHint'),
     reattachHint: $('reattachHint'),
+    primaryArea: $('primaryArea'),
     tagArea: $('tagArea'),
     customInput: $('customInput'),
     addCustomBtn: $('addCustomBtn'),
@@ -325,11 +334,13 @@
     confirmBtn: $('confirmBtn'),
     reopenBtn: $('reopenBtn'),
     confirmHint: $('confirmHint'),
+    saveHint: $('saveHint'),
     clipMessage: $('clipMessage'),
     exportJsonBtn: $('exportJsonBtn'),
     exportCsvBtn: $('exportCsvBtn'),
     exportBackupBtn: $('exportBackupBtn'),
     importBackupBtn: $('importBackupBtn'),
+    migrateLegacyBtn: $('migrateLegacyBtn'),
     backupInput: $('backupInput'),
     exportFullBackupBtn: $('exportFullBackupBtn'),
     exportStatus: $('exportStatus'),
@@ -343,8 +354,8 @@
   const STATUS_TEXT = { confirmed: '已确认', draft: '草稿', unlabeled: '未标注' };
 
   const TAG_GROUPS = [
-    { group: 'parents', values: C.TAXONOMY.parents, title: '父类候选', hint: '可多选，也可以不选。' },
-    { group: 'variants', values: C.TAXONOMY.variants, title: '细分候选（未审定词表）', hint: '可多选；与父类不互斥。' },
+    { group: 'parents', values: [], title: '旧父类候选（仅兼容旧标签）', hint: '不再新增；旧记录原样保留，可手动移除。新的唯一归类请选主音。' },
+    { group: 'variants', values: [...C.TAXONOMY.variants, ...C.EXTRA_VARIANTS], title: '副音 / 复合标签', hint: '可多选，不会自动决定主音。' },
     { group: 'textures', values: C.TAXONOMY.texture_tags, title: '质感', hint: '可多选。' },
     { group: 'styles', values: C.TAXONOMY.style_tags, title: '表达风格', hint: '可多选。' }
   ];
@@ -352,6 +363,14 @@
   let state = null;
   let currentIndex = -1;
   let queueFilter = 'all';
+  let primaryFilter = 'all';
+  C.TAXONOMY.parents.concat('未归类').forEach(function (name) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name === '未归类' ? name : name + '音';
+    els.primaryFilter.append(option);
+  });
+  els.primaryFilter.addEventListener('change', function () { primaryFilter = els.primaryFilter.value; renderQueue(); });
   const attachedFiles = new Map();
   let audioAttachedFingerprint = null;
   let audioAttachedFile = null;
@@ -362,6 +381,19 @@
   const MAX_FULL_BACKUP_BYTES = 100 * 1024 * 1024;
 
   els.taxonomyVersion.textContent = C.TAXONOMY.version;
+  els.migrateLegacyBtn.addEventListener('click', function () {
+    const candidates = state.clips.filter((clip) => !clip.primary && !clip.confirmed && clip.labels.parents.length === 1 && C.TAXONOMY.parents.includes(clip.labels.parents[0]));
+    if (!candidates.length) {
+      setExportStatus('无可迁移草稿：旧已确认记录不会自动改动，请重新编辑后手动选择主音。');
+      return;
+    }
+    const preview = candidates.slice(0, 5).map((clip) => clip.file_name + ' → ' + clip.labels.parents[0] + '音').join('\n');
+    if (!window.confirm('预览：' + candidates.length + ' 条未确认、仅一个旧父类候选的记录可迁移。旧标签仍保留，编号将立即分配，不会复用。\n' + preview + (candidates.length > 5 ? '\n…' : '') + '\n确认执行？')) return;
+    candidates.forEach((clip) => C.setPrimary(state, clip, clip.labels.parents[0]));
+    if (!saveState()) { setExportStatus('迁移写入失败，请立即导出备份。', true); return; }
+    renderAll();
+    setExportStatus('已迁移 ' + candidates.length + ' 条草稿；旧标签仍保留。');
+  });
 
   // ---------- small helpers ----------
 
@@ -467,6 +499,8 @@
 
   function showStorageWarning(show) {
     els.storageWarning.hidden = !show;
+    els.saveHint.textContent = show ? '保存失败：当前修改仅在内存，请立即备份。' : '已保存到本机 ' + new Date().toLocaleTimeString('zh-CN');
+    els.saveHint.classList.toggle('errorText', show);
   }
 
   function saveState() {
@@ -672,7 +706,8 @@
     els.queueList.replaceChildren();
     const visible = [];
     state.clips.forEach(function (clip, index) {
-      if (queueFilter === 'all' || C.statusOf(clip) === queueFilter) {
+      if ((queueFilter === 'all' || C.statusOf(clip) === queueFilter) &&
+          (primaryFilter === 'all' || (clip.primary || '未归类') === primaryFilter)) {
         visible.push({ clip: clip, index: index });
       }
     });
@@ -686,8 +721,20 @@
     }
     els.queueEmpty.hidden = true;
 
-    visible.forEach(function (entry) {
-      const clip = entry.clip;
+    const grouped = C.groupByPrimary(visible.map((entry) => entry.clip));
+    grouped.forEach(function (group) {
+      if (!group.clips.length) return;
+      const groupItem = document.createElement('li');
+      groupItem.className = 'queueGroup';
+      const details = document.createElement('details');
+      details.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = (group.name === '未归类' ? group.name : group.name + '音') + ' · ' + group.clips.length + ' 条';
+      details.append(summary);
+      const nested = document.createElement('ol');
+      nested.className = 'queueList';
+      group.clips.forEach(function (clip) {
+      const entry = visible.find((item) => item.clip === clip);
       const status = C.statusOf(clip);
       const li = document.createElement('li');
       li.className = 'queueItem ' + status + (entry.index === currentIndex ? ' current' : '');
@@ -699,7 +746,7 @@
 
       const name = document.createElement('span');
       name.className = 'queueName';
-      name.textContent = (entry.index + 1) + '. ' + (clip.file_name || '未命名音频');
+      name.textContent = (C.primaryCode(clip) || '未归类') + ' · ' + (clip.file_name || '未命名音频');
 
       const sub = document.createElement('span');
       sub.className = 'queueSub';
@@ -707,11 +754,50 @@
       if (!attachedFiles.has(clip.fingerprint)) bits.push('未连接');
       sub.textContent = bits.join(' · ');
 
-      button.append(name, sub);
+      const tags = document.createElement('span');
+      tags.className = 'queueSub';
+      tags.style.whiteSpace = 'normal';
+      tags.textContent = ['parents', 'variants', 'textures', 'styles', 'custom']
+        .flatMap((key) => clip.labels[key] || []).join(' · ') || '暂无附加标签';
+      button.append(name, sub, tags);
       button.addEventListener('click', function () { goTo(entry.index); });
       li.append(button);
-      els.queueList.append(li);
+      nested.append(li);
+      });
+      details.append(nested);
+      groupItem.append(details);
+      els.queueList.append(groupItem);
     });
+  }
+
+  function renderPrimary(clip) {
+    els.primaryArea.replaceChildren();
+    const heading = document.createElement('h3');
+    heading.textContent = '主音（单选） · ' + (C.primaryCode(clip) || '未归类');
+    els.primaryArea.append(heading);
+    const hint = document.createElement('p');
+    hint.className = 'muted small';
+    hint.textContent = '人工选择后立即分配本会话类别编号；再次点击可取消，原编号保留不复用。';
+    els.primaryArea.append(hint);
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    C.TAXONOMY.parents.forEach(function (name) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chip' + (clip.primary === name ? ' chosen' : '');
+      button.textContent = name + '音';
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', clip.primary === name ? 'true' : 'false');
+      button.disabled = clip.confirmed;
+      button.addEventListener('click', function () {
+        if (currentClip() !== clip || !C.setPrimary(state, clip, name)) return;
+        if (!saveState()) setClipMessage('主音编号未能写入本机，请备份并检查存储。');
+        renderPrimary(clip);
+        afterAnnotationChange(clip);
+      });
+      chips.append(button);
+    });
+    els.primaryArea.append(chips);
   }
 
   function renderTagGroups(clip) {
@@ -807,13 +893,14 @@
 
     els.emptyState.hidden = true;
     els.clipView.hidden = false;
-    els.clipTitle.textContent = (currentIndex + 1) + '. ' + (clip.file_name || '未命名音频');
+    els.clipTitle.textContent = (C.primaryCode(clip) || '未归类') + ' · ' + (clip.file_name || '未命名音频');
     els.clipTitle.title = clip.relative_path || clip.file_name || '';
     els.clipMeta.textContent = metaLine(clip);
     els.clipMeta.title = clip.fingerprint;
     setStatusPill(els.clipStatus, clip);
 
     await syncAudio(clip);
+    renderPrimary(clip);
     renderTagGroups(clip);
     renderCustomChips(clip);
 
@@ -906,7 +993,7 @@
     const clip = currentClip();
     if (!clip) return;
     state.annotator = C.cleanString(els.annotator.value, 200);
-    const result = C.canConfirm(clip, state.annotator);
+    const result = C.confirmClip(state, clip, state.annotator);
     if (!result.ok) {
       setClipMessage(result.reason);
       updateConfirmState();
@@ -914,9 +1001,6 @@
     }
 
     const confirmedIndex = currentIndex;
-    clip.confirmed = true;
-    clip.confirmed_at = new Date().toISOString();
-    clip.updated_at = clip.confirmed_at;
 
     const total = state.clips.length;
     let next = -1;
