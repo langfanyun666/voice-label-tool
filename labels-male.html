@@ -1,0 +1,1714 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<title>男声音色标注 · 声鉴娱乐标注台</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101827; --panel: #1d2a3e; --panel-2: #16243a; --panel-3: #142136;
+    --line: #2f4059; --text: #eef4f6; --muted: #b8c5d7;
+    --accent: #61dfb0; --accent-ink: #122d27; --warn: #ffc36b; --danger: #6c3535;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: auto; padding: 20px 20px 44px; }
+  h1 { margin: 0; font-size: 1.65rem; line-height: 1.25; letter-spacing: .01em; }
+  h2 { margin: 0 0 12px; font-size: 1.18rem; line-height: 1.35; }
+  h3 { margin: 18px 0 8px; font-size: 1rem; }
+  p { margin: 8px 0; }
+  section, header { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 14px 0; }
+  header { background: linear-gradient(135deg, #1d2a3e, #18253a); padding: 22px; }
+  .pageNav { display: flex; gap: 6px; margin-top: 16px; padding: 4px; width: max-content; max-width: 100%; background: var(--panel-3); border: 1px solid var(--line); border-radius: 12px; }
+  .pageNav a { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 8px 16px; border-radius: 9px; color: var(--muted); font-size: .95rem; font-weight: 600; text-decoration: none; transition: background .15s, color .15s; }
+  .pageNav a:hover { background: #22334d; color: var(--text); }
+  .pageNav a[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+  .muted { color: #b8c5d7; }
+  .small { font-size: .88rem; }
+  .notice { margin-top: 14px; padding: 12px 14px; border-left: 4px solid #61dfb0; background: #16283a; border-radius: 8px; color: #d6e4ef; }
+  .notice.warn { border-left-color: #ffc36b; background: #2a2318; color: #ffe3b0; }
+  .errorText { color: #ffb4a8; }
+  .okText { color: #74edbd; }
+  label { display: block; margin: 10px 0; }
+  input[type="text"], input[type="search"], textarea, select {
+    font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #34445d;
+    background: var(--panel-3); color: var(--text); width: 100%; min-height: 44px;
+  }
+  input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea { min-height: 96px; resize: vertical; }
+  button, .buttonLink { font: inherit; cursor: pointer; padding: 9px 14px; min-height: 44px; border-radius: 9px; border: 0; background: #34445d; color: var(--text); }
+  button:hover:not(:disabled), .buttonLink:hover { background: #41546f; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #7ae8c1; }
+  button.danger { background: var(--danger); }
+  .buttonLink { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+  .buttonLink.primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .buttonLink.primary:hover { background: #7ae8c1; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .row > label { flex: 1 1 220px; margin: 0; }
+  .row > button { flex: 0 0 auto; }
+  .sessionGrid { display: grid; grid-template-columns: 1.2fr 1fr auto; gap: 12px; align-items: end; }
+  .sessionGrid label { margin: 0; }
+  .workspace { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .queue { position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+  .queueTools { display: flex; flex-direction: column; gap: 8px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filters button { padding: 6px 10px; font-size: .86rem; }
+  .filters button.active { background: #61dfb0; color: #122d27; font-weight: 600; }
+  .progressWrap { display: flex; align-items: center; gap: 10px; color: #b8c5d7; font-size: .88rem; }
+  .progressTrack { flex: 1; height: 8px; background: #142136; border-radius: 99px; overflow: hidden; }
+  .progressTrack span { display: block; height: 100%; width: 0; background: #61dfb0; transition: width .2s ease; }
+  .queueList { list-style: none; margin: 10px 0 0; padding: 0; overflow: auto; flex: 1; min-height: 80px; }
+  .queueItem { border-left: 4px solid #34445d; margin-bottom: 6px; border-radius: 6px; background: #16243a; }
+  .queueItem.confirmed { border-left-color: #61dfb0; }
+  .queueItem.draft { border-left-color: #ffc36b; }
+  .queueItem.unlabeled { border-left-color: #4b5b75; }
+  .queueItem.current { outline: 2px solid #61dfb0; outline-offset: -2px; }
+  .queueButton { width: 100%; text-align: left; background: transparent; padding: 8px 10px; border-radius: 6px; display: block; }
+  .queueButton:hover:not(:disabled) { background: #22334d; }
+  .queueName { display: block; overflow-wrap: anywhere; white-space: normal; font-size: .95rem; }
+  .queueGroup { margin: 8px 0; }
+  .queueGroup summary { cursor: pointer; font-weight: 700; padding: 6px; }
+  .queueGroup .queueList { margin: 4px 0 10px 10px; overflow: visible; min-height: 0; }
+  .queueSub { display: block; color: #b8c5d7; font-size: .78rem; margin-top: 2px; }
+  .queueEmpty { color: #b8c5d7; font-size: .9rem; }
+  .clipHead { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .clipHead h2 { margin: 0; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: .8rem; font-weight: 600; }
+  .pill.confirmed { background: #61dfb0; color: #122d27; }
+  .pill.draft { background: #ffc36b; color: #3a2a05; }
+  .pill.unlabeled { background: #4b5b75; color: #eef4f6; }
+  audio { width: 100%; margin: 14px 0 4px; }
+  .tagGroup { margin-top: 10px; }
+  .tagGroup h3 { margin-bottom: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { background: #34445d; color: #eef4f6; padding: 8px 12px; font-size: .9rem; min-height: 44px; }
+  .chip.chosen { background: #61dfb0; color: #122d27; font-weight: 600; }
+  .chip.custom { background: #3e5f74; }
+  .chip.custom.chosen { background: #9ee8ff; color: #103040; }
+  .customRow { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .customRow input { flex: 1 1 220px; }
+  .inline { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+  .inline input[type="checkbox"] { width: 18px; height: 18px; accent-color: #61dfb0; }
+  .inline label { margin: 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; position: sticky; bottom: 0; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); background: var(--panel); z-index: 2; }
+  .empty { border: 1px dashed #3a4d69; border-radius: 12px; padding: 28px; text-align: center; color: #b8c5d7; }
+  .importZone { border: 2px dashed #3a4d69; border-radius: 12px; padding: 18px; transition: border-color .15s, background .15s; }
+  .importZone.dragging { border-color: #61dfb0; background: #1b3344; }
+  .importZone.busy { opacity: .65; }
+  .fileBtn { display: inline-block; background: #34445d; color: #eef4f6; padding: 9px 14px; border-radius: 8px; cursor: pointer; margin: 6px 8px 0 0; }
+  .fileBtn:hover { background: #41546f; }
+  .hiddenInput { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .exportRow { display: flex; flex-wrap: wrap; gap: 10px; }
+  .fileInfo { font-size: .84rem; color: #9fb1c8; overflow-wrap: anywhere; }
+  .shortcuts { font-size: .84rem; color: #9fb1c8; }
+  .recordControls { display: grid; gap: 12px; }
+  .recordControls audio { margin: 4px 0; }
+  .mobileButton { min-height: 48px; }
+  .entryCard { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .entryCard h2 { margin: 0 0 4px; }
+  .entryCard .buttonLink { min-height: 48px; padding: 12px 18px; flex: 0 0 auto; }
+  footer { color: #93a6bd; font-size: .84rem; padding: 10px 4px 30px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 900px) {
+    .workspace { grid-template-columns: 1fr; }
+    .queue { position: static; max-height: none; }
+    .queueList { max-height: 320px; }
+    .sessionGrid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    main { padding: 12px 12px 36px; }
+    section, header { padding: 16px; border-radius: 14px; margin: 12px 0; }
+    h1 { font-size: 1.42rem; }
+    .pageNav { width: 100%; }
+    .pageNav a { flex: 1; min-height: 44px; }
+    .entryCard .buttonLink { width: 100%; }
+    .actions button { flex: 1 1 140px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>男声音色标注</h1>
+    <p class="muted">按听感标注男声向主音与副音 · 自动保存进度 · 可备份、可重开</p>
+    <nav class="pageNav" aria-label="页面导航">
+      <a href="index.html">批量导入</a>
+      <a href="recording.html">录音标注</a>
+      <a href="labels-male.html" aria-current="page">男声标注</a>
+      <a href="labels-female.html">女声标注</a>
+    </nav>
+    <div class="notice">
+      这里的"男声"指你听到的声音表现方向，不是对说话者真实性别、年龄或身份的判断；请只记录你实际听到的声音，不要根据姓名、头像或内容猜测。音频只在本机浏览器读取，<strong>不会上传</strong>。标签来自未审定词表，仅供娱乐/研究参考，<strong>不是鉴定结果或模型真值</strong>。
+    </div>
+    <div id="storageWarning" class="notice warn" hidden role="alert">
+      本机存储失败：当前进度只在内存中，请立即导出“会话备份”。
+    </div>
+    <p id="appMessage" class="muted" role="status">正在初始化……</p>
+  </header>
+
+  <section>
+    <h2>1. 会话</h2>
+    <div class="sessionGrid">
+      <label>会话名称
+        <input id="sessionName" type="text" maxlength="200" autocomplete="off" placeholder="例如：我的声鉴标注">
+      </label>
+      <label>标注代号（不是姓名或账号）
+        <input id="annotator" type="text" maxlength="200" autocomplete="off" placeholder="例如：listener-01">
+      </label>
+      <button id="loadSessionBtn" type="button">载入 / 切换会话</button>
+    </div>
+    <p id="sessionInfo" class="muted small">共 0 条 · 已确认 0 · 草稿 0 · 未标注 0 · 音频已连接 0/0</p>
+    <p class="muted small">会话与标签保存在 localStorage；录音 Blob 保存在本机 IndexedDB 并按 recording_id 关联。导入的音频刷新后仍需重新选择；录音可自动恢复。浏览器存储空间不是永久备份。</p>
+  </section>
+
+  <section class="entryCard">
+    <div>
+      <h2>直接录音并标注</h2>
+      <p class="muted small" style="margin-bottom:0">需要麦克风与 HTTPS/localhost。录音只保存在本机，可试听、重录，保存后立即标注。</p>
+    </div>
+    <a class="buttonLink primary" href="recording.html">前往录音标注 →</a>
+  </section>
+
+  <section>
+    <h2>2. 导入本地音频</h2>
+    <div id="dropzone" class="importZone">
+      <p>把音频文件拖到这里，或：</p>
+      <label class="fileBtn">选择音频文件（可多选）
+        <input id="fileInput" class="hiddenInput" type="file" multiple accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.oga,.opus,.flac,.webm,.wma,.aiff,.aif">
+      </label>
+      <label class="fileBtn">选择整个文件夹
+        <input id="dirInput" class="hiddenInput" type="file" webkitdirectory directory multiple>
+      </label>
+      <p class="muted small">支持浏览器能播放的格式（常见 WAV / MP3 / M4A / OGG / FLAC / WebM）。非音频文件会被跳过；同名同内容的文件只保留一条。</p>
+    </div>
+    <p id="importStatus" class="muted small" role="status">尚未导入音频。</p>
+  </section>
+
+  <div class="workspace">
+    <aside class="queue" aria-label="音频队列">
+      <h2>队列</h2>
+      <div class="queueTools">
+        <div class="progressWrap">
+          <span id="progressText">0 / 0</span>
+          <div class="progressTrack"><span id="progressBar"></span></div>
+        </div>
+        <div id="filters" class="filters" role="group" aria-label="筛选队列">
+          <button type="button" data-filter="all" class="active">全部 0</button>
+          <button type="button" data-filter="unlabeled">未标注 0</button>
+          <button type="button" data-filter="draft">草稿 0</button>
+          <button type="button" data-filter="confirmed">已确认 0</button>
+        </div>
+      </div>
+      <label class="muted small">主音筛选 <select id="primaryFilter"><option value="all">全部主音</option></select></label>
+      <ol id="queueList" class="queueList"></ol>
+      <p id="queueEmpty" class="queueEmpty">尚未导入音频。</p>
+      <p class="shortcuts">快捷键：← / → 切换音频，空格 播放/暂停（输入框内不生效）。</p>
+    </aside>
+
+    <section class="clipPanel" aria-label="当前音频标注">
+      <div id="emptyState" class="empty">尚未导入音频。<br>使用上方“选择音频文件/文件夹”，或把文件拖进来。</div>
+      <div id="clipView" hidden>
+        <div class="clipHead">
+          <h2 id="clipTitle">—</h2>
+          <span id="clipStatus" class="pill unlabeled">未标注</span>
+        </div>
+        <p id="clipMeta" class="fileInfo"></p>
+        <audio id="audio" controls preload="metadata" hidden></audio>
+        <p id="playHint" class="muted small"></p>
+        <p id="reattachHint" class="muted small" hidden>音频未连接：请重新选择相同文件/文件夹，工具会按指纹自动关联；标注与确认状态已保留。</p>
+
+        <div id="domainArea" class="tagGroup" role="radiogroup" aria-label="声音方向，单选"></div>
+        <div id="primaryArea" class="tagGroup" role="radiogroup" aria-label="主音，单选"></div>
+        <div id="tagArea"></div>
+
+        <div class="tagGroup">
+          <h3>自定义标签（仅本条）</h3>
+          <div class="customRow">
+            <input id="customInput" type="text" maxlength="40" autocomplete="off" placeholder="输入圈子用语或自己的描述，例如：电台感">
+            <button id="addCustomBtn" type="button">添加标签</button>
+          </div>
+          <div id="customChips" class="chips" aria-live="polite"></div>
+        </div>
+
+        <label>备注（可选）
+          <textarea id="note" maxlength="1000" placeholder="记录这条音频给你的感觉；不要推断真实身份或年龄。"></textarea>
+        </label>
+
+        <label>声线状态（可选）
+          <select id="voiceMode">
+            <option value="unknown">不确定</option>
+            <option value="natural">我认为是自然声线</option>
+            <option value="acted">我认为有表演/变声</option>
+            <option value="processed">我认为有后期处理</option>
+          </select>
+        </label>
+
+        <div class="inline">
+          <input id="unsure" type="checkbox">
+          <label for="unsure">无法确定（勾选后也可以保留其它标签）</label>
+        </div>
+
+        <div class="actions">
+          <button id="prevBtn" type="button">← 上一条</button>
+          <button id="confirmBtn" type="button" class="primary">保存并下一条</button>
+          <button id="reopenBtn" type="button" hidden>重新编辑本条</button>
+          <button id="nextBtn" type="button">跳过，下一条 →</button>
+        </div>
+        <p id="confirmHint" class="muted small"></p>
+        <p id="saveHint" class="muted small" role="status"></p>
+        <p id="clipMessage" class="okText" role="status"></p>
+        <div class="actions" style="margin-top:0">
+          <button id="deleteClipBtn" type="button" class="danger">删除这条录音/音频</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <h2>3. 导出与备份</h2>
+    <p class="muted small">
+      导出内容来自当前内存状态，并会先尝试保存到本机。JSON 与 CSV 包含队列中的全部记录（未标注 / 草稿 / 已确认），均标记为 <code>unreviewed</code> / <code>training_enabled=false</code>；不会包含音频本身。
+    </p>
+    <div class="exportRow">
+      <button id="exportJsonBtn" type="button">导出标注 JSON</button>
+      <button id="exportCsvBtn" type="button">导出标注 CSV</button>
+      <button id="exportBackupBtn" type="button">导出会话备份（仅标签）</button>
+      <button id="exportFullBackupBtn" type="button">导出完整备份（声音 + 标签）</button>
+      <button id="importBackupBtn" type="button">导入会话备份</button>
+      <button id="migrateLegacyBtn" type="button">预览旧父类迁移</button>
+      <input id="backupInput" class="hiddenInput" type="file" accept=".json,application/json">
+    </div>
+    <p id="exportStatus" class="muted small" role="status"></p>
+    <p class="muted small">
+      本工具与 <code>preview/</code> 下的盲听包完全分开：这里导出 <code>label-observations-v1</code>，不是 blind ballot，也不写入盲听 localStorage。请勿把本工具结果冒充独立盲听、三人复核或训练真值。
+    </p>
+  </section>
+
+  <footer>
+    本地娱乐标注工具 · 不连接后端、不自动打标签 · 词表版本 <span id="taxonomyVersion"></span> · 所有标签维持未审定。
+  </footer>
+</main>
+
+<script src="annotation-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const C = window.AnnotationCore;
+  const $ = (id) => document.getElementById(id);
+
+  const els = {
+    storageWarning: $('storageWarning'),
+    appMessage: $('appMessage'),
+    sessionName: $('sessionName'),
+    annotator: $('annotator'),
+    loadSessionBtn: $('loadSessionBtn'),
+    sessionInfo: $('sessionInfo'),
+    dropzone: $('dropzone'),
+    fileInput: $('fileInput'),
+    dirInput: $('dirInput'),
+    importStatus: $('importStatus'),
+    progressText: $('progressText'),
+    progressBar: $('progressBar'),
+    filters: $('filters'),
+    primaryFilter: $('primaryFilter'),
+    queueList: $('queueList'),
+    queueEmpty: $('queueEmpty'),
+    emptyState: $('emptyState'),
+    clipView: $('clipView'),
+    clipTitle: $('clipTitle'),
+    clipStatus: $('clipStatus'),
+    clipMeta: $('clipMeta'),
+    audio: $('audio'),
+    playHint: $('playHint'),
+    playHint: $('playHint'),
+    reattachHint: $('reattachHint'),
+    primaryArea: $('primaryArea'),
+    tagArea: $('tagArea'),
+    customInput: $('customInput'),
+    addCustomBtn: $('addCustomBtn'),
+    customChips: $('customChips'),
+    note: $('note'),
+    voiceMode: $('voiceMode'),
+    unsure: $('unsure'),
+    prevBtn: $('prevBtn'),
+    nextBtn: $('nextBtn'),
+    confirmBtn: $('confirmBtn'),
+    reopenBtn: $('reopenBtn'),
+    deleteClipBtn: $('deleteClipBtn'),
+    domainArea: $('domainArea'),
+    confirmHint: $('confirmHint'),
+    saveHint: $('saveHint'),
+    clipMessage: $('clipMessage'),
+    exportJsonBtn: $('exportJsonBtn'),
+    exportCsvBtn: $('exportCsvBtn'),
+    exportBackupBtn: $('exportBackupBtn'),
+    importBackupBtn: $('importBackupBtn'),
+    migrateLegacyBtn: $('migrateLegacyBtn'),
+    backupInput: $('backupInput'),
+    exportFullBackupBtn: $('exportFullBackupBtn'),
+    exportStatus: $('exportStatus'),
+    taxonomyVersion: $('taxonomyVersion')
+  };
+
+  const STORE_PREFIX = 'voice-label:';
+  const META_KEY = 'voice-label-meta';
+  const RECORDING_DB = 'voice-label-recordings-v1';
+  const FILTER_LABELS = { all: '全部', unlabeled: '未标注', draft: '草稿', confirmed: '已确认' };
+  const STATUS_TEXT = { confirmed: '已确认', draft: '草稿', unlabeled: '未标注' };
+
+  // 质感/风格共用；副音按 voice_domain 动态组装（见 tagGroupsFor）。旧父类候选单独一块，仅兼容旧数据。
+  const LEGACY_GROUP = { group: 'parents', values: [], title: '旧父类候选（仅兼容旧标签，不再新增）', hint: '旧记录原样保留，可手动移除。新的唯一归类请选上方主音。' };
+  const SHARED_TAG_GROUPS = [
+    { group: 'textures', values: C.TAXONOMY.texture_tags, title: '质感', hint: '可多选。' },
+    { group: 'styles', values: C.TAXONOMY.style_tags, title: '表达风格', hint: '可多选。' }
+  ];
+
+  function variantGroupFor(clip) {
+    const domainWords = clip.voice_domain ? C.domainVariants(clip.voice_domain) : [];
+    const values = [...domainWords, ...C.TAXONOMY.domains.shared];
+    return { group: 'variants', values, title: '副音 / 复合标签', hint: clip.voice_domain ? '可多选，不会自动决定主音；含两性共用复合音。' : '请先选择男声/女声方向后再选副音。' };
+  }
+
+  function tagGroupsFor(clip) {
+    return [variantGroupFor(clip), ...SHARED_TAG_GROUPS];
+  }
+
+  let state = null;
+  let currentIndex = -1;
+  let queueFilter = 'all';
+  let primaryFilter = 'all';
+  C.domainPrimaries('male').concat('未归类').forEach(function (name) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name === '未归类' ? name : name + '音';
+    els.primaryFilter.append(option);
+  });
+  els.primaryFilter.addEventListener('change', function () { primaryFilter = els.primaryFilter.value; renderQueue(); });
+  const attachedFiles = new Map();
+  let audioAttachedFingerprint = null;
+  let audioAttachedFile = null;
+  let currentObjectUrl = null;
+  let saveTimer = null;
+  let storageAvailable = true;
+  let importing = false;
+  const MAX_FULL_BACKUP_BYTES = 100 * 1024 * 1024;
+
+  els.taxonomyVersion.textContent = C.TAXONOMY.version;
+  els.migrateLegacyBtn.addEventListener('click', function () {
+    const candidates = state.clips.filter((clip) => !clip.primary && !clip.confirmed && clip.labels.parents.length === 1 && C.TAXONOMY.parents.includes(clip.labels.parents[0]));
+    if (!candidates.length) {
+      setExportStatus('无可迁移草稿：旧已确认记录不会自动改动，请重新编辑后手动选择主音。');
+      return;
+    }
+    const preview = candidates.slice(0, 5).map((clip) => clip.file_name + ' → ' + clip.labels.parents[0] + '音').join('\n');
+    if (!window.confirm('预览：' + candidates.length + ' 条未确认、仅一个旧父类候选的记录可迁移。旧标签仍保留，编号将立即分配，不会复用。\n' + preview + (candidates.length > 5 ? '\n…' : '') + '\n确认执行？')) return;
+    candidates.forEach((clip) => C.setPrimary(state, clip, clip.labels.parents[0]));
+    if (!saveState()) { setExportStatus('迁移写入失败，请立即导出备份。', true); return; }
+    renderAll();
+    setExportStatus('已迁移 ' + candidates.length + ' 条草稿；旧标签仍保留。');
+  });
+
+  // ---------- small helpers ----------
+
+  function currentClip() {
+    if (!state) return null;
+    if (currentIndex < 0 || currentIndex >= state.clips.length) return null;
+    return state.clips[currentIndex];
+  }
+
+  function setAppMessage(text) { els.appMessage.textContent = text || ''; }
+  function setClipMessage(text) { els.clipMessage.textContent = text || ''; }
+  function setImportStatus(text) { els.importStatus.textContent = text || ''; }
+  function setExportStatus(text, isError) {
+    els.exportStatus.textContent = text || '';
+    els.exportStatus.classList.toggle('errorText', Boolean(isError));
+    els.exportStatus.classList.toggle('okText', !isError);
+  }
+
+  function formatDuration(seconds) {
+    if (!Number.isFinite(seconds) || seconds <= 0) return '未知';
+    const total = Math.round(seconds);
+    const minutes = Math.floor(total / 60);
+    const rest = total % 60;
+    return minutes + ':' + String(rest).padStart(2, '0');
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+    return (value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)) + ' ' + units[unit];
+  }
+
+  function formatDateTime(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return String(iso);
+    return date.toLocaleString('zh-CN', { hour12: false });
+  }
+
+  function metaLine(clip) {
+    const parts = [];
+    parts.push('时长 ' + formatDuration(clip.duration_seconds));
+    parts.push('大小 ' + formatBytes(clip.size_bytes));
+    if (clip.relative_path) parts.push('路径 ' + clip.relative_path);
+    parts.push('指纹 ' + clip.fingerprint.slice(0, 20) + '…');
+    if (clip.confirmed && clip.confirmed_at) parts.push('确认于 ' + formatDateTime(clip.confirmed_at));
+    return parts.join(' · ');
+  }
+
+  function setStatusPill(element, clip) {
+    const status = C.statusOf(clip);
+    element.textContent = STATUS_TEXT[status];
+    element.className = 'pill ' + status;
+  }
+
+  // ---------- storage ----------
+
+  function probeStorage() {
+    try {
+      const key = STORE_PREFIX + '__probe__';
+      localStorage.setItem(key, '1');
+      localStorage.removeItem(key);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function storageKey(name) { return STORE_PREFIX + (name || '默认会话'); }
+
+  function readMeta() {
+    try {
+      const raw = localStorage.getItem(META_KEY);
+      if (!raw) return {};
+      const meta = JSON.parse(raw);
+      return meta && typeof meta === 'object' ? meta : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function writeMeta(meta) {
+    try {
+      localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (error) {
+      // 主存储失败时已经会提示；这里不重复打扰。
+    }
+  }
+
+  function readStoredSession(name) {
+    if (!storageAvailable) return null;
+    try {
+      const raw = localStorage.getItem(storageKey(name));
+      if (!raw) return null;
+      return C.sanitizeSession(JSON.parse(raw));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function showStorageWarning(show) {
+    els.storageWarning.hidden = !show;
+    els.saveHint.textContent = show ? '保存失败：当前修改仅在内存，请立即备份。' : '已保存到本机 ' + new Date().toLocaleTimeString('zh-CN');
+    els.saveHint.classList.toggle('errorText', show);
+  }
+
+  function saveState() {
+    if (!state) return false;
+    state.updated_at = new Date().toISOString();
+    if (!storageAvailable) {
+      showStorageWarning(true);
+      return false;
+    }
+    try {
+      localStorage.setItem(storageKey(state.name), JSON.stringify(state));
+      writeMeta({ lastSession: state.name, annotator: state.annotator });
+      showStorageWarning(false);
+      return true;
+    } catch (error) {
+      showStorageWarning(true);
+      return false;
+    }
+  }
+
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      saveTimer = null;
+      saveState();
+    }, 300);
+  }
+
+  function flushSave() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    return saveState();
+  }
+
+  // ---------- local recording storage ----------
+
+  function openRecordingDb() {
+    return new Promise(function (resolve, reject) {
+      if (!('indexedDB' in window)) { reject(new Error('当前浏览器不支持本地录音存储（IndexedDB）。')); return; }
+      const request = indexedDB.open(RECORDING_DB, 1);
+      request.onupgradeneeded = function () {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('recordings')) db.createObjectStore('recordings', { keyPath: 'id' });
+      };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { reject(request.error || new Error('无法打开本地录音库。')); };
+    });
+  }
+
+  async function getRecording(id) {
+    const db = await openRecordingDb();
+    return new Promise(function (resolve, reject) {
+      let result = null;
+      let requestError = null;
+      let settled = false;
+      const tx = db.transaction('recordings', 'readonly');
+      const request = tx.objectStore('recordings').get(id);
+      request.onsuccess = function () { result = request.result || null; };
+      request.onerror = function () { requestError = request.error || new Error('读取录音失败'); };
+      tx.oncomplete = function () { db.close(); if (!settled) { settled = true; requestError ? reject(requestError) : resolve(result); } };
+      tx.onerror = tx.onabort = function () { db.close(); if (!settled) { settled = true; reject(tx.error || requestError || new Error('读取录音事务失败')); } };
+    });
+  }
+
+  async function allRecordings() {
+    const db = await openRecordingDb();
+    return new Promise(function (resolve, reject) {
+      let result = [];
+      let requestError = null;
+      let settled = false;
+      const tx = db.transaction('recordings', 'readonly');
+      const request = tx.objectStore('recordings').getAll();
+      request.onsuccess = function () { result = request.result || []; };
+      request.onerror = function () { requestError = request.error || new Error('读取录音列表失败'); };
+      tx.oncomplete = function () { db.close(); if (!settled) { settled = true; requestError ? reject(requestError) : resolve(result); } };
+      tx.onerror = tx.onabort = function () { db.close(); if (!settled) { settled = true; reject(tx.error || requestError || new Error('读取录音列表事务失败')); } };
+    });
+  }
+
+  async function writeRecordingChanges(putItems, deleteIds) {
+    const db = await openRecordingDb();
+    return new Promise(function (resolve, reject) {
+      let settled = false;
+      const tx = db.transaction('recordings', 'readwrite');
+      const store = tx.objectStore('recordings');
+      (putItems || []).forEach(function (record) { store.put(record); });
+      (deleteIds || []).forEach(function (id) { store.delete(id); });
+      tx.oncomplete = function () { db.close(); if (!settled) { settled = true; resolve(); } };
+      tx.onerror = tx.onabort = function () { db.close(); if (!settled) { settled = true; reject(tx.error || new Error('录音库事务失败')); } };
+    });
+  }
+
+  async function putRecordings(records) { return writeRecordingChanges(records, []); }
+
+  // ---------- audio ----------
+
+  function releaseAudioElement() {
+    audioAttachedFingerprint = null;
+    audioAttachedFile = null;
+    try {
+      els.audio.pause();
+      els.audio.removeAttribute('src');
+      els.audio.load();
+    } catch (error) { /* noop */ }
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
+  }
+
+  function resetAudio() {
+    releaseAudioElement();
+    els.audio.hidden = true;
+  }
+
+  async function syncAudio(clip) {
+    let file = clip ? attachedFiles.get(clip.fingerprint) : null;
+    if (!file && clip && clip.recording_id) {
+      try {
+        const saved = await getRecording(clip.recording_id);
+        if (saved && saved.blob) {
+          file = saved.blob;
+          attachedFiles.set(clip.fingerprint, file);
+        }
+      } catch (error) { setClipMessage('无法读取本机录音：' + (error.message || 'IndexedDB 错误')); }
+    }
+    if (!clip || !file) {
+      releaseAudioElement();
+      els.audio.hidden = true;
+      els.reattachHint.hidden = !clip;
+      return;
+    }
+    els.reattachHint.hidden = true;
+    els.audio.hidden = false;
+    if (audioAttachedFingerprint !== clip.fingerprint || audioAttachedFile !== file) {
+      releaseAudioElement();
+      currentObjectUrl = URL.createObjectURL(file);
+      els.audio.src = currentObjectUrl;
+      audioAttachedFingerprint = clip.fingerprint;
+      audioAttachedFile = file;
+      try { els.audio.load(); } catch (error) { /* noop */ }
+    }
+  }
+
+  function updatePlayHint(clip) {
+    if (!clip) { els.playHint.textContent = ''; return; }
+    if (!attachedFiles.has(clip.fingerprint)) {
+      els.playHint.textContent = '音频未连接：重新选择相同文件/文件夹即可按指纹自动关联。';
+      return;
+    }
+    if (clip.heard_audio) {
+      els.playHint.textContent = '已完整播放过这条音频。';
+    } else {
+      els.playHint.textContent = '需要播放到结尾后才能确认。';
+    }
+  }
+
+  function togglePlayback() {
+    const clip = currentClip();
+    if (!clip || !attachedFiles.has(clip.fingerprint)) {
+      setClipMessage('音频未连接，无法播放。');
+      return;
+    }
+    if (els.audio.paused) {
+      const promise = els.audio.play();
+      if (promise && typeof promise.catch === 'function') {
+        promise.catch(function () { setClipMessage('浏览器无法播放这个文件。'); });
+      }
+    } else {
+      els.audio.pause();
+    }
+  }
+
+  // ---------- rendering ----------
+
+  function renderSessionInfo() {
+    const counts = C.countStatuses(state.clips);
+    const attached = state.clips.filter(function (clip) {
+      return attachedFiles.has(clip.fingerprint);
+    }).length;
+    els.sessionInfo.textContent =
+      '共 ' + counts.total + ' 条 · 已确认 ' + counts.confirmed +
+      ' · 草稿 ' + counts.draft + ' · 未标注 ' + counts.unlabeled +
+      ' · 音频已连接 ' + attached + '/' + counts.total;
+    els.progressText.textContent = counts.confirmed + ' / ' + counts.total;
+    els.progressBar.style.width = counts.total
+      ? String(Math.round((counts.confirmed * 100) / counts.total)) + '%'
+      : '0%';
+  }
+
+  function renderQueue() {
+    const counts = C.countStatuses(state.clips);
+    const buttons = els.filters.querySelectorAll('button[data-filter]');
+    buttons.forEach(function (button) {
+      const filter = button.getAttribute('data-filter');
+      const count = filter === 'all' ? counts.total : counts[filter];
+      button.textContent = FILTER_LABELS[filter] + ' ' + count;
+      button.classList.toggle('active', filter === queueFilter);
+    });
+
+    els.queueList.replaceChildren();
+    const visible = [];
+    state.clips.forEach(function (clip, index) {
+      // 本页只显示：已归入本方向的条目，以及尚未选方向的（供归类）。另一方向的条目不出现在本页。
+      if (clip.voice_domain && clip.voice_domain !== PAGE_DOMAIN) return;
+      if ((queueFilter === 'all' || C.statusOf(clip) === queueFilter) &&
+          (primaryFilter === 'all' || (clip.primary || '未归类') === primaryFilter)) {
+        visible.push({ clip: clip, index: index });
+      }
+    });
+
+    if (!visible.length) {
+      els.queueEmpty.hidden = false;
+      els.queueEmpty.textContent = state.clips.length
+        ? '此筛选下没有音频。'
+        : '尚未导入音频。';
+      return;
+    }
+    els.queueEmpty.hidden = true;
+
+    const grouped = C.groupByPrimary(visible.map((entry) => entry.clip), PAGE_DOMAIN);
+    grouped.forEach(function (group) {
+      if (!group.clips.length) return;
+      const groupItem = document.createElement('li');
+      groupItem.className = 'queueGroup';
+      const details = document.createElement('details');
+      details.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = (group.name === '未归类' ? group.name : group.name + '音') + ' · ' + group.clips.length + ' 条';
+      details.append(summary);
+      const nested = document.createElement('ol');
+      nested.className = 'queueList';
+      group.clips.forEach(function (clip) {
+      const entry = visible.find((item) => item.clip === clip);
+      const status = C.statusOf(clip);
+      const li = document.createElement('li');
+      li.className = 'queueItem ' + status + (entry.index === currentIndex ? ' current' : '');
+      li.setAttribute('data-index', String(entry.index));
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'queueButton';
+
+      const name = document.createElement('span');
+      name.className = 'queueName';
+      name.textContent = (C.primaryCode(clip) || '未归类') + ' · ' + (clip.file_name || '未命名音频');
+
+      const sub = document.createElement('span');
+      sub.className = 'queueSub';
+      const bits = [STATUS_TEXT[status], '时长 ' + formatDuration(clip.duration_seconds)];
+      if (!attachedFiles.has(clip.fingerprint)) bits.push('未连接');
+      sub.textContent = bits.join(' · ');
+
+      const tags = document.createElement('span');
+      tags.className = 'queueSub';
+      tags.style.whiteSpace = 'normal';
+      tags.textContent = ['parents', 'variants', 'textures', 'styles', 'custom']
+        .flatMap((key) => clip.labels[key] || []).join(' · ') || '暂无附加标签';
+      button.append(name, sub, tags);
+      button.addEventListener('click', function () { goTo(entry.index); });
+      li.append(button);
+      nested.append(li);
+      });
+      details.append(nested);
+      groupItem.append(details);
+      els.queueList.append(groupItem);
+    });
+  }
+
+  // 本页固定为男声方向：主音列表、副音列表均只含男声词表（+两性共用复合音）。
+  const PAGE_DOMAIN = 'male';
+
+  function renderPrimary(clip) {
+    els.domainArea.replaceChildren();
+    els.primaryArea.replaceChildren();
+
+    if (!PAGE_DOMAIN) {
+      // 旧档/混合视图：只读显示方向与主音，指引去对应页面编辑。
+      const note = document.createElement('p');
+      note.className = 'muted small';
+      note.textContent = clip.voice_domain
+        ? '本条已归入 ' + C.TAXONOMY.domains[clip.voice_domain].label + '；请前往 ' + (clip.voice_domain === 'male' ? '男声标注页' : '女声标注页') + ' 编辑主音。'
+        : '本条尚未选择方向。请前往男声标注页或女声标注页，点选主音即完成分配。';
+      els.domainArea.append(note);
+      const heading = document.createElement('h3');
+      heading.textContent = '主音 · ' + (C.primaryCode(clip) || (clip.legacy_primary ? '旧父类：' + clip.legacy_primary + '（仅兼容）' : '未归类'));
+      els.primaryArea.append(heading);
+      return;
+    }
+
+    if (clip.voice_domain && clip.voice_domain !== PAGE_DOMAIN) {
+      const warn = document.createElement('p');
+      warn.className = 'muted small errorText';
+      warn.textContent = '本条已归入 ' + C.TAXONOMY.domains[clip.voice_domain].label + '，不在本页显示/编辑。请前往对应页面。';
+      els.domainArea.append(warn);
+      return;
+    }
+
+    const heading = document.createElement('h3');
+    heading.textContent = '主音（单选，必选其一或无法确定） · ' + (C.primaryCode(clip) || '未归类');
+    els.primaryArea.append(heading);
+    const hint = document.createElement('p');
+    hint.className = 'muted small';
+    hint.textContent = '点选即选择方向并分配本会话类别编号；再次点击可取消，原编号保留不复用。';
+    els.primaryArea.append(hint);
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    C.domainPrimaries(PAGE_DOMAIN).forEach(function (name) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chip' + (clip.primary === name ? ' chosen' : '');
+      button.textContent = name + '音';
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', clip.primary === name ? 'true' : 'false');
+      button.disabled = clip.confirmed;
+      button.addEventListener('click', function () {
+        if (currentClip() !== clip) return;
+        if (!clip.voice_domain) C.setVoiceDomain(clip, PAGE_DOMAIN);
+        if (!C.setPrimary(state, clip, name)) return;
+        if (!saveState()) setClipMessage('主音编号未能写入本机，请备份并检查存储。');
+        renderPrimary(clip);
+        renderTagGroups(clip);
+        afterAnnotationChange(clip);
+      });
+      chips.append(button);
+    });
+    els.primaryArea.append(chips);
+  }
+
+  function renderTagGroups(clip) {
+    els.tagArea.replaceChildren();
+    const groupsToRender = [LEGACY_GROUP, ...tagGroupsFor(clip)];
+    groupsToRender.forEach(function (definition) {
+      const block = document.createElement('div');
+      block.className = 'tagGroup';
+
+      const heading = document.createElement('h3');
+      heading.textContent = definition.title;
+      const hint = document.createElement('span');
+      hint.className = 'muted small';
+      hint.textContent = '　' + definition.hint;
+      heading.append(hint);
+      block.append(heading);
+
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+      const selected = new Set(clip.labels[definition.group] || []);
+      const known = new Set(definition.values);
+
+      function appendChip(value, fromOldBackup) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (selected.has(value) ? ' chosen' : '') + (fromOldBackup ? ' custom' : '');
+        chip.textContent = fromOldBackup ? value + ' ×' : value;
+        chip.disabled = clip.confirmed === true;
+        chip.setAttribute('aria-pressed', selected.has(value) ? 'true' : 'false');
+        if (fromOldBackup) chip.title = '当前词表中没有这个标签（可能来自旧备份），点击移除';
+        chip.addEventListener('click', function () {
+          const active = currentClip();
+          if (!active || active.fingerprint !== clip.fingerprint || active.confirmed) return;
+          C.toggleLabel(active, definition.group, value);
+          if (fromOldBackup) {
+            chip.remove();
+          } else {
+            const on = active.labels[definition.group].includes(value);
+            chip.classList.toggle('chosen', on);
+            chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+          }
+          afterAnnotationChange(active);
+        });
+        chips.append(chip);
+      }
+
+      definition.values.forEach(function (value) { appendChip(value, false); });
+      clip.labels[definition.group].forEach(function (value) {
+        if (!known.has(value)) appendChip(value, true);
+      });
+      block.append(chips);
+      els.tagArea.append(block);
+    });
+  }
+
+  function renderCustomChips(clip) {
+    els.customChips.replaceChildren();
+    if (!clip.labels.custom.length) {
+      const empty = document.createElement('span');
+      empty.className = 'muted small';
+      empty.textContent = '暂无自定义标签。';
+      els.customChips.append(empty);
+      return;
+    }
+    clip.labels.custom.forEach(function (tag) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip custom chosen';
+      chip.textContent = tag + ' ×';
+      chip.title = '点击移除这个自定义标签';
+      chip.disabled = clip.confirmed === true;
+      chip.addEventListener('click', function () {
+        const active = currentClip();
+        if (!active || active.fingerprint !== clip.fingerprint || active.confirmed) return;
+        C.removeCustomTag(active, tag);
+        renderCustomChips(active);
+        afterAnnotationChange(active);
+      });
+      els.customChips.append(chip);
+    });
+  }
+
+  async function renderClip() {
+    const clip = currentClip();
+    if (!clip) {
+      els.clipView.hidden = true;
+      els.emptyState.hidden = false;
+      els.emptyState.textContent = state.clips.length
+        ? '请从左侧队列选择一个音频。'
+        : '尚未导入音频。使用上方“选择音频文件/文件夹”，或把文件拖进来。';
+      resetAudio();
+      return;
+    }
+
+    els.emptyState.hidden = true;
+    els.clipView.hidden = false;
+    els.clipTitle.textContent = (C.primaryCode(clip) || '未归类') + ' · ' + (clip.file_name || '未命名音频');
+    els.clipTitle.title = clip.relative_path || clip.file_name || '';
+    els.clipMeta.textContent = metaLine(clip);
+    els.clipMeta.title = clip.fingerprint;
+    setStatusPill(els.clipStatus, clip);
+
+    await syncAudio(clip);
+    renderPrimary(clip);
+    renderTagGroups(clip);
+    renderCustomChips(clip);
+
+    els.note.value = clip.note || '';
+    els.voiceMode.value = clip.voice_mode || 'unknown';
+    els.unsure.checked = clip.unsure === true;
+
+    const locked = clip.confirmed === true;
+    els.note.disabled = locked;
+    els.voiceMode.disabled = locked;
+    els.unsure.disabled = locked;
+    els.customInput.disabled = locked;
+    els.addCustomBtn.disabled = locked;
+    els.reopenBtn.hidden = !locked;
+    els.confirmBtn.hidden = locked;
+
+    els.prevBtn.disabled = currentIndex <= 0;
+    els.nextBtn.disabled = currentIndex >= state.clips.length - 1;
+
+    updatePlayHint(clip);
+    updateConfirmState();
+    setClipMessage('');
+  }
+
+  function renderAll() {
+    if (!state) return;
+    renderSessionInfo();
+    renderQueue();
+    renderClip();
+  }
+
+  function updateConfirmState() {
+    const clip = currentClip();
+    if (!clip || clip.confirmed) {
+      els.confirmBtn.disabled = true;
+      els.confirmHint.textContent = '';
+      return;
+    }
+    const result = C.canConfirm(clip, state.annotator);
+    els.confirmBtn.disabled = !result.ok;
+    els.confirmHint.textContent = result.ok ? '条件满足，可以确认。' : result.reason;
+  }
+
+  function afterAnnotationChange(clip) {
+    clip.updated_at = new Date().toISOString();
+    setStatusPill(els.clipStatus, clip);
+    renderQueue();
+    renderSessionInfo();
+    updateConfirmState();
+    scheduleSave();
+  }
+
+  // ---------- navigation / actions ----------
+
+  function goTo(index) {
+    if (!state || !state.clips.length) {
+      currentIndex = -1;
+      renderAll();
+      return;
+    }
+    const clamped = Math.max(0, Math.min(index, state.clips.length - 1));
+    currentIndex = clamped;
+    renderClip();
+    renderQueue();
+    const item = els.queueList.querySelector('[data-index="' + currentIndex + '"]');
+    if (item && typeof item.scrollIntoView === 'function') {
+      item.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function addCustomFromInput() {
+    const clip = currentClip();
+    if (!clip) return;
+    if (clip.confirmed) {
+      setClipMessage('本条已确认；如需修改请先“重新编辑本条”。');
+      return;
+    }
+    const result = C.addCustomTag(clip, els.customInput.value);
+    if (!result.added) {
+      setClipMessage(result.reason);
+      return;
+    }
+    els.customInput.value = '';
+    renderCustomChips(clip);
+    afterAnnotationChange(clip);
+    setClipMessage('已添加自定义标签：' + result.value);
+  }
+
+  function confirmCurrent() {
+    const clip = currentClip();
+    if (!clip) return;
+    state.annotator = C.cleanString(els.annotator.value, 200);
+    const result = C.confirmClip(state, clip, state.annotator);
+    if (!result.ok) {
+      setClipMessage(result.reason);
+      updateConfirmState();
+      return;
+    }
+
+    const confirmedIndex = currentIndex;
+
+    if (!saveState()) {
+      clip.confirmed = false;
+      clip.confirmed_at = null;
+      renderAll();
+      setClipMessage('保存失败，本条未确认：请检查本机存储空间后重试，或立即导出备份。');
+      return;
+    }
+
+    const total = state.clips.length;
+    let next = -1;
+    for (let step = 1; step <= total; step += 1) {
+      const candidate = (confirmedIndex + step) % total;
+      if (candidate !== confirmedIndex && !state.clips[candidate].confirmed) {
+        next = candidate;
+        break;
+      }
+    }
+
+    if (next >= 0) {
+      currentIndex = next;
+      renderAll();
+      setClipMessage('第 ' + (confirmedIndex + 1) + ' 条已确认，前进到第 ' + (next + 1) + ' 条。');
+    } else {
+      renderAll();
+      setClipMessage('第 ' + (confirmedIndex + 1) + ' 条已确认。全部音频都已确认，可以导出。');
+    }
+  }
+
+  function reopenCurrent() {
+    const clip = currentClip();
+    if (!clip || !clip.confirmed) return;
+    clip.confirmed = false;
+    clip.confirmed_at = null;
+    clip.updated_at = new Date().toISOString();
+    saveState();
+    renderAll();
+    setClipMessage('已重新打开本条，标签恢复可编辑；再次确认后会重新锁定。');
+  }
+
+  /**
+   * 删除当前音频：先确认，再从会话标签移除并落盘，成功后才删 IndexedDB 录音 blob。
+   * 若标签保存失败，不删除 blob（避免丢声音又留孤儿引用）；若之后 blob 删除失败，
+   * 标签已经移除但会提示用户手动清理，不静默吞掉错误。
+   */
+  async function deleteCurrentClip() {
+    const clip = currentClip();
+    if (!clip) return;
+    const label = (C.primaryCode(clip) || clip.legacy_primary || '未归类') + ' · ' + (clip.file_name || '未命名音频');
+    if (!window.confirm('确定删除“' + label + '”？音频和标签都会从本机移除，且不可恢复。')) return;
+
+    const fingerprint = clip.fingerprint;
+    const recordingId = clip.recording_id;
+    const originalIndex = currentIndex;
+    const attachedFile = attachedFiles.get(fingerprint);
+    const removed = C.removeClip(state, fingerprint);
+    if (!removed) return;
+    attachedFiles.delete(fingerprint);
+    if (!saveState()) {
+      state.clips.splice(Math.min(originalIndex, state.clips.length), 0, removed);
+      if (attachedFile) attachedFiles.set(fingerprint, attachedFile);
+      renderAll();
+      setClipMessage('删除失败：标签未能写入本机，已恢复原状态，请检查存储后重试。');
+      return;
+    }
+    if (recordingId) {
+      try {
+        await writeRecordingChanges([], [recordingId]);
+      } catch (error) {
+        state.clips.splice(Math.min(originalIndex, state.clips.length), 0, removed);
+        if (attachedFile) attachedFiles.set(fingerprint, attachedFile);
+        const restored = saveState();
+        currentIndex = originalIndex;
+        renderAll();
+        setClipMessage(restored
+          ? '删除失败：本机录音未能清理，标签和录音关联已恢复。'
+          : '删除失败：本机录音未能清理，当前页面已恢复标签；会话写入失败，请立即导出备份。');
+        return;
+      }
+    }
+    currentIndex = Math.min(originalIndex, state.clips.length - 1);
+    renderAll();
+    setClipMessage('已删除“' + label + '”（标签与本机录音均已清理）。');
+  }
+
+  // ---------- sessions ----------
+
+  function switchToSession(rawName) {
+    if (importing) {
+      setAppMessage('正在读取音频，请等导入完成后再切换会话。');
+      if (state) els.sessionName.value = state.name;
+      return false;
+    }
+    const name = C.cleanString(rawName, 200) || '默认会话';
+    if (state && state.name === name) {
+      els.sessionName.value = name;
+      setAppMessage('当前已经是会话“' + name + '”。');
+      return false;
+    }
+    flushSave();
+    const loaded = readStoredSession(name);
+    if (loaded) {
+      state = loaded;
+    } else {
+      state = C.makeSession(name, els.annotator.value);
+    }
+    if (!state.annotator) state.annotator = C.cleanString(els.annotator.value, 200);
+    if (state.annotator) els.annotator.value = state.annotator;
+
+    els.sessionName.value = state.name;
+    attachedFiles.clear();
+    resetAudio();
+    currentIndex = state.clips.length ? 0 : -1;
+    saveState();
+    renderAll();
+
+    if (loaded) {
+      setAppMessage('已载入会话“' + state.name + '”（' + state.clips.length +
+        ' 条元数据）。请重新选择相同音频文件/文件夹以继续播放。');
+    } else {
+      setAppMessage('已新建会话“' + state.name + '”。请导入本地音频。');
+    }
+    return true;
+  }
+
+  // ---------- import ----------
+
+  function isAudioFile(file) {
+    if (!file) return false;
+    const type = String(file.type || '').toLowerCase();
+    if (type.indexOf('audio/') === 0) return true;
+    const name = String(file.name || '').toLowerCase();
+    const dot = name.lastIndexOf('.');
+    if (dot < 0) return false;
+    const extension = name.slice(dot + 1);
+    return ['wav', 'mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'flac', 'webm', 'wma', 'aiff', 'aif'].includes(extension);
+  }
+
+  async function fingerprintFile(file) {
+    try {
+      const buffer = await file.arrayBuffer();
+      if (window.crypto && window.crypto.subtle && window.crypto.subtle.digest) {
+        const digest = await window.crypto.subtle.digest('SHA-256', buffer);
+        const hex = Array.from(new Uint8Array(digest)).map(function (byte) {
+          return byte.toString(16).padStart(2, '0');
+        }).join('');
+        return 'sha256:' + hex;
+      }
+    } catch (error) {
+      // 回退到文件名/大小/修改时间指纹。
+    }
+    return C.fallbackFingerprint(file.name, file.size, file.lastModified);
+  }
+
+  function probeDuration(file) {
+    return new Promise(function (resolve) {
+      let url = null;
+      let audio = null;
+      let settled = false;
+      let timer = null;
+
+      function finish(value) {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        if (audio) {
+          audio.onloadedmetadata = null;
+          audio.onerror = null;
+          try {
+            audio.removeAttribute('src');
+            audio.load();
+          } catch (error) { /* noop */ }
+        }
+        if (url) URL.revokeObjectURL(url);
+        resolve(value);
+      }
+
+      timer = setTimeout(function () { finish(null); }, 8000);
+      try {
+        url = URL.createObjectURL(file);
+        audio = new Audio();
+        audio.preload = 'metadata';
+        audio.onloadedmetadata = function () {
+          const duration = audio.duration;
+          finish(Number.isFinite(duration) && duration > 0 ? Math.round(duration * 1000) / 1000 : null);
+        };
+        audio.onerror = function () { finish(null); };
+        audio.src = url;
+      } catch (error) {
+        finish(null);
+      }
+    });
+  }
+
+  async function processFiles(fileList) {
+    if (importing) return;
+    const desiredName = C.cleanString(els.sessionName.value, 200) || '默认会话';
+    if (!state || state.name !== desiredName) {
+      switchToSession(desiredName);
+    }
+
+    const all = Array.from(fileList || []);
+    if (!all.length) return;
+    const audioFiles = all.filter(isAudioFile);
+    const ignored = all.length - audioFiles.length;
+    if (!audioFiles.length) {
+      setImportStatus('没有可识别的音频文件。');
+      return;
+    }
+
+    importing = true;
+    els.fileInput.disabled = true;
+    els.dirInput.disabled = true;
+    els.dropzone.classList.add('busy');
+
+    const metas = [];
+    let readFailed = 0;
+
+    try {
+      for (let index = 0; index < audioFiles.length; index += 1) {
+        const file = audioFiles[index];
+        setImportStatus('读取中 ' + (index + 1) + '/' + audioFiles.length + '：' + file.name);
+        try {
+          const fingerprint = await fingerprintFile(file);
+          const duration = await probeDuration(file);
+          metas.push({
+            fingerprint: fingerprint,
+            file_name: file.name,
+            relative_path: file.webkitRelativePath || '',
+            size_bytes: file.size,
+            last_modified: file.lastModified,
+            duration_seconds: duration,
+            _file: file
+          });
+        } catch (error) {
+          readFailed += 1;
+        }
+      }
+
+      const wasEmpty = state.clips.length === 0;
+      const result = C.mergeImport(state.clips, metas, new Date().toISOString());
+
+      const byFingerprint = new Map(state.clips.map(function (clip) {
+        return [clip.fingerprint, clip];
+      }));
+      metas.forEach(function (meta) {
+        const clip = byFingerprint.get(meta.fingerprint);
+        if (clip && meta._file) attachedFiles.set(clip.fingerprint, meta._file);
+      });
+
+      state.updated_at = new Date().toISOString();
+      if ((wasEmpty && state.clips.length) || currentIndex < 0) currentIndex = 0;
+
+      saveState();
+      renderAll();
+
+      const skipped = result.skipped.length + ignored + readFailed;
+      setImportStatus('完成：新增 ' + result.added.length + ' 条，重新连接 ' +
+        result.reattached.length + ' 条，跳过 ' + skipped + ' 个文件。音频只在本机读取。');
+      setAppMessage('导入完成。进度已保存在本机；已确认内容保持锁定。');
+    } catch (error) {
+      setImportStatus('导入失败：' + (error && error.message ? error.message : '未知错误'));
+    } finally {
+      importing = false;
+      els.fileInput.disabled = false;
+      els.dirInput.disabled = false;
+      els.dropzone.classList.remove('busy');
+    }
+  }
+
+  // ---------- export / backup ----------
+
+  function fileTimestamp() {
+    const date = new Date();
+    const pad = function (value) { return String(value).padStart(2, '0'); };
+    return date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate()) + '-' +
+      pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds());
+  }
+
+  function fileBase() {
+    const base = (state && state.name ? state.name : 'voice-label')
+      .replace(/[\\/:*?"<>|\r\n\t]+/g, '_').trim().slice(0, 80);
+    return base || 'voice-label';
+  }
+
+  function download(filename, content, mime) {
+    const blob = new Blob([content], { type: mime || 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function exportJson() {
+    if (!state.clips.length) {
+      setExportStatus('没有可导出的记录。', true);
+      return;
+    }
+    flushSave();
+    const dataset = C.buildDataset(state, new Date().toISOString());
+    download(fileBase() + '-label-observations-' + fileTimestamp() + '.json',
+      JSON.stringify(dataset, null, 2));
+    setExportStatus('已导出 ' + dataset.observations.length + ' 条标注（已确认 ' +
+      dataset.counts.confirmed + ' 条，草稿 ' + dataset.counts.draft + ' 条）。');
+  }
+
+  function exportCsv() {
+    if (!state.clips.length) {
+      setExportStatus('没有可导出的记录。', true);
+      return;
+    }
+    flushSave();
+    const csv = '\uFEFF' + C.buildCsv(state);
+    download(fileBase() + '-label-observations-' + fileTimestamp() + '.csv',
+      csv, 'text/csv;charset=utf-8');
+    setExportStatus('已导出 CSV（含表头 ' + C.CSV_COLUMNS.length + ' 列；标注均为 unreviewed）。');
+  }
+
+  function base64FromBlob(blob) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result).split(',')[1] || ''); };
+      reader.onerror = function () { reject(reader.error || new Error('无法读取音频')); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function exportFullBackup() {
+    if (!state.clips.length) { setExportStatus('没有可备份的会话记录。', true); return; }
+    try {
+      flushSave();
+      const recordings = await allRecordings();
+      const linked = new Set(state.clips.map(function (clip) { return clip.recording_id; }).filter(Boolean));
+      const byId = new Map(recordings.map(function (item) { return [item.id, item]; }));
+      const linkedIds = Array.from(linked);
+      const rawBytes = linkedIds.reduce(function (sum, id) {
+        const item = byId.get(id);
+        if (!item || !item.blob) throw new Error('找不到关联录音 ' + id + '，请检查本机录音库');
+        return sum + item.blob.size;
+      }, 0);
+      if (rawBytes > Math.floor(MAX_FULL_BACKUP_BYTES * 0.70)) throw new Error('关联录音总大小超过完整备份上限（约 70 MiB）。请分会话备份或使用仅标签备份。');
+      const payload = [];
+      for (const id of linkedIds) {
+        const item = byId.get(id);
+        payload.push({ id: item.id, mime_type: item.mime_type, created_at: item.created_at, data_base64: await base64FromBlob(item.blob) });
+      }
+      const backup = { schema: 'voice-label-full-backup-v1', exported_at: new Date().toISOString(), session: C.sanitizeSession(state), recordings: payload };
+      const json = JSON.stringify(backup);
+      if (new Blob([json]).size > MAX_FULL_BACKUP_BYTES) throw new Error('完整备份超过 100 MiB 上限；请分会话备份。');
+      download(fileBase() + '-full-backup-' + fileTimestamp() + '.json', json);
+      setExportStatus('完整备份已导出：' + payload.length + ' 段录音与标签。该文件可能很大且含敏感声音，请安全保管。');
+    } catch (error) { setExportStatus('完整备份失败：' + (error.message || '未知错误'), true); }
+  }
+
+  function exportBackup() {
+    if (!state.clips.length) {
+      setExportStatus('没有可备份的会话记录。', true);
+      return;
+    }
+    flushSave();
+    const backup = C.buildBackup(state, new Date().toISOString());
+    download(fileBase() + '-session-backup-' + fileTimestamp() + '.json',
+      JSON.stringify(backup, null, 2));
+    setExportStatus('已导出会话备份（只含元数据，不含音频文件）。刷新或换浏览器后可导入恢复。');
+  }
+
+  async function importBackup(file) {
+    if (!file) return;
+    if (importing) {
+      setExportStatus('正在读取音频，请等导入完成后再导入备份。', true);
+      return;
+    }
+    try {
+      if (file.size > MAX_FULL_BACKUP_BYTES) throw new Error('备份文件超过 100 MiB 上限，拒绝导入以保护内存。');
+      const text = await file.text();
+      const candidate = JSON.parse(text);
+      if (candidate && candidate.schema === 'voice-label-full-backup-v1' && candidate.session && Array.isArray(candidate.recordings)) {
+        const session = C.sanitizeSession(candidate.session);
+        if (!session) { setExportStatus('完整备份中的会话结构无效。', true); return; }
+        const existing = readStoredSession(session.name);
+        if (existing && existing.clips.length && !window.confirm('本机已有同名会话，导入会覆盖进度。继续吗？')) return;
+        if (candidate.recordings.length > 1000) throw new Error('录音条目数超过 1000 条限制。');
+        const expectedIds = new Set(session.clips.map(function (clip) { return clip.recording_id; }).filter(Boolean));
+        const seenIds = new Set();
+        const decoded = [];
+        let aggregateBytes = 0;
+        for (const record of candidate.recordings) {
+          if (!record || typeof record.id !== 'string' || record.id.length > 100 || !expectedIds.has(record.id) || seenIds.has(record.id) || (record.mime_type !== undefined && (typeof record.mime_type !== 'string' || !/^[\w.+-]+\/[\w.+-]+(?:;[\w=.+-]+)?$/.test(record.mime_type))) || typeof record.data_base64 !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(record.data_base64)) throw new Error('录音条目无效、重复或未关联标签');
+          seenIds.add(record.id);
+          const decodedLength = Math.floor(record.data_base64.length * 3 / 4) - (record.data_base64.endsWith('==') ? 2 : record.data_base64.endsWith('=') ? 1 : 0);
+          aggregateBytes += decodedLength;
+          if (aggregateBytes > Math.floor(MAX_FULL_BACKUP_BYTES * 0.70)) throw new Error('录音总大小超过完整备份限制。');
+          const binary = atob(record.data_base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+          decoded.push({ id: record.id, blob: new Blob([bytes], { type: record.mime_type || 'application/octet-stream' }), mime_type: record.mime_type || '', created_at: record.created_at || new Date().toISOString() });
+        }
+        if (seenIds.size !== expectedIds.size) throw new Error('备份缺少与会话标签关联的录音数据。');
+        const previousRecords = [];
+        for (const id of seenIds) {
+          const previous = await getRecording(id);
+          if (previous) previousRecords.push(previous);
+        }
+        flushSave();
+        await putRecordings(decoded);
+        const previousState = state;
+        const previousIndex = currentIndex;
+        const previousName = els.sessionName.value;
+        state = session;
+        els.sessionName.value = state.name;
+        currentIndex = state.clips.length ? 0 : -1;
+        if (!saveState()) {
+          state = previousState;
+          currentIndex = previousIndex;
+          els.sessionName.value = previousName;
+          await writeRecordingChanges(previousRecords, Array.from(seenIds).filter(function (id) {
+            return !previousRecords.some(function (record) { return record.id === id; });
+          }));
+          renderAll();
+          throw new Error('本机无法保存会话标签（localStorage 不可用）；录音导入已回滚，请启用本机存储后重试。');
+        }
+        attachedFiles.clear(); resetAudio(); renderAll();
+        setAppMessage('完整备份已恢复：' + decoded.length + ' 段本机录音与标签。');
+        setExportStatus('完整备份已导入。'); return;
+      }
+      const parsed = C.parseSessionBackup(candidate);
+      if (!parsed.ok) {
+        setExportStatus('导入失败：' + parsed.reason, true);
+        return;
+      }
+      const existing = readStoredSession(parsed.session.name);
+      if (existing && existing.clips.length) {
+        const proceed = window.confirm('本机已有会话“' + parsed.session.name + '”的 ' +
+          existing.clips.length + ' 条记录。导入备份会覆盖该会话在本机的进度。继续吗？');
+        if (!proceed) {
+          setExportStatus('已取消导入。');
+          return;
+        }
+      }
+      flushSave();
+      state = parsed.session;
+      els.sessionName.value = state.name;
+      if (state.annotator) els.annotator.value = state.annotator;
+      attachedFiles.clear();
+      resetAudio();
+      currentIndex = state.clips.length ? 0 : -1;
+      saveState();
+      renderAll();
+      setAppMessage('会话备份已恢复。录音仍在本机时会自动连接；导入音频请重新选择相同文件/文件夹。');
+      setExportStatus('已导入备份：' + state.clips.length + ' 条元数据；标注与确认状态已保留。');
+    } catch (error) {
+      setExportStatus('导入失败：' + (error && error.message ? error.message : '未知错误'), true);
+    }
+  }
+
+  // ---------- events ----------
+
+  function bindEvents() {
+    els.sessionName.addEventListener('change', function () {
+      switchToSession(els.sessionName.value);
+    });
+    els.loadSessionBtn.addEventListener('click', function () {
+      switchToSession(els.sessionName.value);
+    });
+    els.annotator.addEventListener('input', function () {
+      if (!state) return;
+      state.annotator = C.cleanString(els.annotator.value, 200);
+      writeMeta({ lastSession: state.name, annotator: state.annotator });
+      scheduleSave();
+      updateConfirmState();
+    });
+
+    els.fileInput.addEventListener('change', function () {
+      const files = Array.from(els.fileInput.files || []);
+      els.fileInput.value = '';
+      processFiles(files);
+    });
+    els.dirInput.addEventListener('change', function () {
+      const files = Array.from(els.dirInput.files || []);
+      els.dirInput.value = '';
+      processFiles(files);
+    });
+
+    ['dragenter', 'dragover'].forEach(function (eventName) {
+      els.dropzone.addEventListener(eventName, function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        els.dropzone.classList.add('dragging');
+      });
+    });
+    ['dragleave', 'dragend'].forEach(function (eventName) {
+      els.dropzone.addEventListener(eventName, function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        els.dropzone.classList.remove('dragging');
+      });
+    });
+    els.dropzone.addEventListener('drop', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      els.dropzone.classList.remove('dragging');
+      if (event.dataTransfer && event.dataTransfer.files) {
+        processFiles(event.dataTransfer.files);
+      }
+    });
+
+    els.filters.addEventListener('click', function (event) {
+      const button = event.target.closest('button[data-filter]');
+      if (!button) return;
+      queueFilter = button.getAttribute('data-filter');
+      renderQueue();
+    });
+
+    els.prevBtn.addEventListener('click', function () { goTo(currentIndex - 1); });
+    els.nextBtn.addEventListener('click', function () { goTo(currentIndex + 1); });
+    els.confirmBtn.addEventListener('click', confirmCurrent);
+    els.reopenBtn.addEventListener('click', reopenCurrent);
+    els.deleteClipBtn.addEventListener('click', deleteCurrentClip);
+
+    els.addCustomBtn.addEventListener('click', addCustomFromInput);
+    els.customInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addCustomFromInput();
+      }
+    });
+
+    els.unsure.addEventListener('change', function () {
+      const clip = currentClip();
+      if (!clip || clip.confirmed) {
+        els.unsure.checked = clip ? clip.unsure === true : false;
+        return;
+      }
+      clip.unsure = els.unsure.checked;
+      afterAnnotationChange(clip);
+    });
+
+    els.voiceMode.addEventListener('change', function () {
+      const clip = currentClip();
+      if (!clip || clip.confirmed) return;
+      const value = els.voiceMode.value;
+      clip.voice_mode = Object.prototype.hasOwnProperty.call(C.VOICE_MODES, value) ? value : 'unknown';
+      afterAnnotationChange(clip);
+    });
+
+    els.note.addEventListener('input', function () {
+      const clip = currentClip();
+      if (!clip || clip.confirmed) return;
+      const value = els.note.value.slice(0, 1000);
+      if (value === clip.note) return;
+      clip.note = value;
+      clip.updated_at = new Date().toISOString();
+      setStatusPill(els.clipStatus, clip);
+      renderQueue();
+      renderSessionInfo();
+      updateConfirmState();
+      scheduleSave();
+    });
+
+    els.audio.addEventListener('ended', function () {
+      const clip = currentClip();
+      if (!clip) return;
+      if (!clip.heard_audio) {
+        clip.heard_audio = true;
+        clip.updated_at = new Date().toISOString();
+        scheduleSave();
+        renderQueue();
+      }
+      updatePlayHint(clip);
+      updateConfirmState();
+    });
+    els.audio.addEventListener('error', function () {
+      if (!audioAttachedFingerprint) return;
+      const clip = currentClip();
+      if (!clip) return;
+      els.playHint.textContent = '浏览器无法播放这个文件（格式可能不受支持）。标签仍可编辑，但无法完成“播放到结尾”的确认门槛。';
+      updateConfirmState();
+    });
+
+    els.exportJsonBtn.addEventListener('click', exportJson);
+    els.exportCsvBtn.addEventListener('click', exportCsv);
+    els.exportBackupBtn.addEventListener('click', exportBackup);
+    els.exportFullBackupBtn.addEventListener('click', exportFullBackup);
+    els.importBackupBtn.addEventListener('click', function () { els.backupInput.click(); });
+    els.backupInput.addEventListener('change', function () {
+      const file = els.backupInput.files && els.backupInput.files[0];
+      els.backupInput.value = '';
+      importBackup(file);
+    });
+
+    document.addEventListener('keydown', function (event) {
+      const target = event.target;
+      const tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+      if (target && (target.isContentEditable ||
+          ['input', 'textarea', 'select', 'button', 'a', 'audio'].includes(tag))) {
+        if (event.key === 'Escape' && target.blur) target.blur();
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        goTo(currentIndex - 1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        goTo(currentIndex + 1);
+      } else if (event.code === 'Space') {
+        event.preventDefault();
+        togglePlayback();
+      }
+    });
+
+    window.addEventListener('pagehide', function () { flushSave(); });
+    window.addEventListener('beforeunload', function () { flushSave(); });
+  }
+
+  // ---------- init ----------
+
+  function init() {
+    storageAvailable = probeStorage();
+    const meta = readMeta();
+    const defaultName = '我的声鉴标注';
+    const rememberedName = C.cleanString(meta.lastSession, 200) || defaultName;
+    els.sessionName.value = rememberedName;
+    els.annotator.value = C.cleanString(meta.annotator, 200);
+
+    let loaded = null;
+    if (storageAvailable && C.cleanString(meta.lastSession, 200)) {
+      loaded = readStoredSession(rememberedName);
+    }
+    if (loaded) {
+      state = loaded;
+    } else {
+      state = C.makeSession(rememberedName, els.annotator.value);
+    }
+    if (!state.annotator) state.annotator = C.cleanString(els.annotator.value, 200);
+    if (state.annotator) els.annotator.value = state.annotator;
+    els.sessionName.value = state.name;
+
+    currentIndex = state.clips.length ? 0 : -1;
+    renderAll();
+
+    if (state.clips.length) {
+      setAppMessage('已载入本机会话“' + state.name + '”的 ' + state.clips.length +
+        ' 条标注元数据。重新选择同一批音频文件/文件夹即可继续；已确认内容保持锁定。');
+    } else {
+      setAppMessage('先填写会话名称和标注代号，再导入本地音频。');
+    }
+    if (!storageAvailable) showStorageWarning(true);
+    else writeMeta({ lastSession: state.name, annotator: state.annotator });
+  }
+
+  bindEvents();
+  init();
+})();
+</script>
+</body>
+</html>
