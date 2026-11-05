@@ -139,9 +139,11 @@
     <nav class="pageNav" aria-label="页面导航">
       <a href="index.html" aria-current="page">批量导入</a>
       <a href="recording.html">录音标注</a>
+      <a href="labels-male.html">男声标注</a>
+      <a href="labels-female.html">女声标注</a>
     </nav>
     <div class="notice">
-      音频只在本机浏览器读取，<strong>不会上传</strong>，也不会请求外部服务或生产后端。标签来自未审定词表，仅供娱乐/研究参考，<strong>不是鉴定结果或模型真值</strong>。
+      音频只在本机浏览器读取，<strong>不会上传</strong>，也不会请求外部服务或生产后端。标签来自未审定词表，仅供娱乐/研究参考，<strong>不是鉴定结果或模型真值</strong>。方向与主音编辑请前往“男声标注/女声标注”页。
     </div>
     <div id="storageWarning" class="notice warn" hidden role="alert">
       本机存储失败：当前进度只在内存中，请立即导出“会话备份”。
@@ -220,6 +222,7 @@
         <p id="playHint" class="muted small"></p>
         <p id="reattachHint" class="muted small" hidden>音频未连接：请重新选择相同文件/文件夹，工具会按指纹自动关联；标注与确认状态已保留。</p>
 
+        <div id="domainArea" class="tagGroup" role="radiogroup" aria-label="声音方向，单选"></div>
         <div id="primaryArea" class="tagGroup" role="radiogroup" aria-label="主音，单选"></div>
         <div id="tagArea"></div>
 
@@ -252,13 +255,16 @@
 
         <div class="actions">
           <button id="prevBtn" type="button">← 上一条</button>
-          <button id="confirmBtn" type="button" class="primary">确认并下一条</button>
+          <button id="confirmBtn" type="button" class="primary">保存并下一条</button>
           <button id="reopenBtn" type="button" hidden>重新编辑本条</button>
-          <button id="nextBtn" type="button">跳过（不确认），下一条 →</button>
+          <button id="nextBtn" type="button">跳过，下一条 →</button>
         </div>
         <p id="confirmHint" class="muted small"></p>
         <p id="saveHint" class="muted small" role="status"></p>
         <p id="clipMessage" class="okText" role="status"></p>
+        <div class="actions" style="margin-top:0">
+          <button id="deleteClipBtn" type="button" class="danger">删除这条录音/音频</button>
+        </div>
       </div>
     </section>
   </div>
@@ -333,6 +339,8 @@
     nextBtn: $('nextBtn'),
     confirmBtn: $('confirmBtn'),
     reopenBtn: $('reopenBtn'),
+    deleteClipBtn: $('deleteClipBtn'),
+    domainArea: $('domainArea'),
     confirmHint: $('confirmHint'),
     saveHint: $('saveHint'),
     clipMessage: $('clipMessage'),
@@ -353,12 +361,22 @@
   const FILTER_LABELS = { all: '全部', unlabeled: '未标注', draft: '草稿', confirmed: '已确认' };
   const STATUS_TEXT = { confirmed: '已确认', draft: '草稿', unlabeled: '未标注' };
 
-  const TAG_GROUPS = [
-    { group: 'parents', values: [], title: '旧父类候选（仅兼容旧标签）', hint: '不再新增；旧记录原样保留，可手动移除。新的唯一归类请选主音。' },
-    { group: 'variants', values: [...C.TAXONOMY.variants, ...C.EXTRA_VARIANTS], title: '副音 / 复合标签', hint: '可多选，不会自动决定主音。' },
+  // 质感/风格共用；副音按 voice_domain 动态组装（见 tagGroupsFor）。旧父类候选单独一块，仅兼容旧数据。
+  const LEGACY_GROUP = { group: 'parents', values: [], title: '旧父类候选（仅兼容旧标签，不再新增）', hint: '旧记录原样保留，可手动移除。新的唯一归类请选上方主音。' };
+  const SHARED_TAG_GROUPS = [
     { group: 'textures', values: C.TAXONOMY.texture_tags, title: '质感', hint: '可多选。' },
     { group: 'styles', values: C.TAXONOMY.style_tags, title: '表达风格', hint: '可多选。' }
   ];
+
+  function variantGroupFor(clip) {
+    const domainWords = clip.voice_domain ? C.domainVariants(clip.voice_domain) : [];
+    const values = [...domainWords, ...C.TAXONOMY.domains.shared];
+    return { group: 'variants', values, title: '副音 / 复合标签', hint: clip.voice_domain ? '可多选，不会自动决定主音；含两性共用复合音。' : '请先选择男声/女声方向后再选副音。' };
+  }
+
+  function tagGroupsFor(clip) {
+    return [variantGroupFor(clip), ...SHARED_TAG_GROUPS];
+  }
 
   let state = null;
   let currentIndex = -1;
@@ -770,18 +788,45 @@
     });
   }
 
+  // 批量导入页是混合视图：显示已归类方向/主音，但方向与主音编辑只在男声/女声标注页进行。
+  const PAGE_DOMAIN = '';
+
   function renderPrimary(clip) {
+    els.domainArea.replaceChildren();
     els.primaryArea.replaceChildren();
+
+    if (!PAGE_DOMAIN) {
+      // 旧档/混合视图：只读显示方向与主音，指引去对应页面编辑。
+      const note = document.createElement('p');
+      note.className = 'muted small';
+      note.textContent = clip.voice_domain
+        ? '本条已归入 ' + C.TAXONOMY.domains[clip.voice_domain].label + '；请前往 ' + (clip.voice_domain === 'male' ? '男声标注页' : '女声标注页') + ' 编辑主音。'
+        : '本条尚未选择方向。请前往男声标注页或女声标注页，点选主音即完成分配。';
+      els.domainArea.append(note);
+      const heading = document.createElement('h3');
+      heading.textContent = '主音 · ' + (C.primaryCode(clip) || (clip.legacy_primary ? '旧父类：' + clip.legacy_primary + '（仅兼容）' : '未归类'));
+      els.primaryArea.append(heading);
+      return;
+    }
+
+    if (clip.voice_domain && clip.voice_domain !== PAGE_DOMAIN) {
+      const warn = document.createElement('p');
+      warn.className = 'muted small errorText';
+      warn.textContent = '本条已归入 ' + C.TAXONOMY.domains[clip.voice_domain].label + '，不在本页显示/编辑。请前往对应页面。';
+      els.domainArea.append(warn);
+      return;
+    }
+
     const heading = document.createElement('h3');
-    heading.textContent = '主音（单选） · ' + (C.primaryCode(clip) || '未归类');
+    heading.textContent = '主音（单选，必选其一或无法确定） · ' + (C.primaryCode(clip) || '未归类');
     els.primaryArea.append(heading);
     const hint = document.createElement('p');
     hint.className = 'muted small';
-    hint.textContent = '人工选择后立即分配本会话类别编号；再次点击可取消，原编号保留不复用。';
+    hint.textContent = '点选即选择方向并分配本会话类别编号；再次点击可取消，原编号保留不复用。';
     els.primaryArea.append(hint);
     const chips = document.createElement('div');
     chips.className = 'chips';
-    C.TAXONOMY.parents.forEach(function (name) {
+    C.domainPrimaries(PAGE_DOMAIN).forEach(function (name) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'chip' + (clip.primary === name ? ' chosen' : '');
@@ -790,9 +835,12 @@
       button.setAttribute('aria-checked', clip.primary === name ? 'true' : 'false');
       button.disabled = clip.confirmed;
       button.addEventListener('click', function () {
-        if (currentClip() !== clip || !C.setPrimary(state, clip, name)) return;
+        if (currentClip() !== clip) return;
+        if (!clip.voice_domain) C.setVoiceDomain(clip, PAGE_DOMAIN);
+        if (!C.setPrimary(state, clip, name)) return;
         if (!saveState()) setClipMessage('主音编号未能写入本机，请备份并检查存储。');
         renderPrimary(clip);
+        renderTagGroups(clip);
         afterAnnotationChange(clip);
       });
       chips.append(button);
@@ -802,7 +850,8 @@
 
   function renderTagGroups(clip) {
     els.tagArea.replaceChildren();
-    TAG_GROUPS.forEach(function (definition) {
+    const groupsToRender = [LEGACY_GROUP, ...tagGroupsFor(clip)];
+    groupsToRender.forEach(function (definition) {
       const block = document.createElement('div');
       block.className = 'tagGroup';
 
@@ -1002,6 +1051,14 @@
 
     const confirmedIndex = currentIndex;
 
+    if (!saveState()) {
+      clip.confirmed = false;
+      clip.confirmed_at = null;
+      renderAll();
+      setClipMessage('保存失败，本条未确认：请检查本机存储空间后重试，或立即导出备份。');
+      return;
+    }
+
     const total = state.clips.length;
     let next = -1;
     for (let step = 1; step <= total; step += 1) {
@@ -1012,7 +1069,6 @@
       }
     }
 
-    saveState();
     if (next >= 0) {
       currentIndex = next;
       renderAll();
@@ -1032,6 +1088,51 @@
     saveState();
     renderAll();
     setClipMessage('已重新打开本条，标签恢复可编辑；再次确认后会重新锁定。');
+  }
+
+  /**
+   * 删除当前音频：先确认，再从会话标签移除并落盘，成功后才删 IndexedDB 录音 blob。
+   * 若标签保存失败，不删除 blob（避免丢声音又留孤儿引用）；若之后 blob 删除失败，
+   * 标签已经移除但会提示用户手动清理，不静默吞掉错误。
+   */
+  async function deleteCurrentClip() {
+    const clip = currentClip();
+    if (!clip) return;
+    const label = (C.primaryCode(clip) || clip.legacy_primary || '未归类') + ' · ' + (clip.file_name || '未命名音频');
+    if (!window.confirm('确定删除“' + label + '”？音频和标签都会从本机移除，且不可恢复。')) return;
+
+    const fingerprint = clip.fingerprint;
+    const recordingId = clip.recording_id;
+    const originalIndex = currentIndex;
+    const attachedFile = attachedFiles.get(fingerprint);
+    const removed = C.removeClip(state, fingerprint);
+    if (!removed) return;
+    attachedFiles.delete(fingerprint);
+    if (!saveState()) {
+      state.clips.splice(Math.min(originalIndex, state.clips.length), 0, removed);
+      if (attachedFile) attachedFiles.set(fingerprint, attachedFile);
+      renderAll();
+      setClipMessage('删除失败：标签未能写入本机，已恢复原状态，请检查存储后重试。');
+      return;
+    }
+    if (recordingId) {
+      try {
+        await writeRecordingChanges([], [recordingId]);
+      } catch (error) {
+        state.clips.splice(Math.min(originalIndex, state.clips.length), 0, removed);
+        if (attachedFile) attachedFiles.set(fingerprint, attachedFile);
+        const restored = saveState();
+        currentIndex = originalIndex;
+        renderAll();
+        setClipMessage(restored
+          ? '删除失败：本机录音未能清理，标签和录音关联已恢复。'
+          : '删除失败：本机录音未能清理，当前页面已恢复标签；会话写入失败，请立即导出备份。');
+        return;
+      }
+    }
+    currentIndex = Math.min(originalIndex, state.clips.length - 1);
+    renderAll();
+    setClipMessage('已删除“' + label + '”（标签与本机录音均已清理）。');
   }
 
   // ---------- sessions ----------
@@ -1470,6 +1571,7 @@
     els.nextBtn.addEventListener('click', function () { goTo(currentIndex + 1); });
     els.confirmBtn.addEventListener('click', confirmCurrent);
     els.reopenBtn.addEventListener('click', reopenCurrent);
+    els.deleteClipBtn.addEventListener('click', deleteCurrentClip);
 
     els.addCustomBtn.addEventListener('click', addCustomFromInput);
     els.customInput.addEventListener('keydown', function (event) {
