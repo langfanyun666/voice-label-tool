@@ -6,16 +6,26 @@
 <meta http-equiv="Content-Security-Policy" content="connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
 <title>声鉴娱乐标注台 · 本地音频多标签</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --bg: #101827; --panel: #1d2a3e; --panel-2: #16243a; --panel-3: #142136;
+    --line: #2f4059; --text: #eef4f6; --muted: #b8c5d7;
+    --accent: #61dfb0; --accent-ink: #122d27; --warn: #ffc36b; --danger: #6c3535;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #101827; color: #eef4f6; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1200px; margin: auto; padding: 24px; }
-  h1 { margin: 0 0 4px; font-size: 1.8rem; }
-  h2 { margin: 0 0 12px; font-size: 1.2rem; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: auto; padding: 20px 20px 44px; }
+  h1 { margin: 0; font-size: 1.65rem; line-height: 1.25; letter-spacing: .01em; }
+  h2 { margin: 0 0 12px; font-size: 1.18rem; line-height: 1.35; }
   h3 { margin: 18px 0 8px; font-size: 1rem; }
   p { margin: 8px 0; }
-  section, header { background: #1d2a3e; border-radius: 16px; padding: 20px; margin: 16px 0; }
-  header { background: linear-gradient(135deg, #1d2a3e, #18253a); }
+  section, header { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 14px 0; }
+  header { background: linear-gradient(135deg, #1d2a3e, #18253a); padding: 22px; }
+  .pageNav { display: flex; gap: 6px; margin-top: 16px; padding: 4px; width: max-content; max-width: 100%; background: var(--panel-3); border: 1px solid var(--line); border-radius: 12px; }
+  .pageNav a { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 8px 16px; border-radius: 9px; color: var(--muted); font-size: .95rem; font-weight: 600; text-decoration: none; transition: background .15s, color .15s; }
+  .pageNav a:hover { background: #22334d; color: var(--text); }
+  .pageNav a[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
   .muted { color: #b8c5d7; }
   .small { font-size: .88rem; }
   .notice { margin-top: 14px; padding: 12px 14px; border-left: 4px solid #61dfb0; background: #16283a; border-radius: 8px; color: #d6e4ef; }
@@ -25,16 +35,19 @@
   label { display: block; margin: 10px 0; }
   input[type="text"], input[type="search"], textarea, select {
     font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #34445d;
-    background: #142136; color: #eef4f6; width: 100%;
+    background: var(--panel-3); color: var(--text); width: 100%; min-height: 44px;
   }
-  input:focus, textarea:focus, select:focus, button:focus-visible { outline: 2px solid #61dfb0; outline-offset: 2px; }
-  textarea { min-height: 90px; resize: vertical; }
-  button { font: inherit; cursor: pointer; padding: 9px 14px; border-radius: 8px; border: 0; background: #34445d; color: #eef4f6; }
-  button:hover:not(:disabled) { background: #41546f; }
+  input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea { min-height: 96px; resize: vertical; }
+  button, .buttonLink { font: inherit; cursor: pointer; padding: 9px 14px; min-height: 44px; border-radius: 9px; border: 0; background: #34445d; color: var(--text); }
+  button:hover:not(:disabled), .buttonLink:hover { background: #41546f; }
   button:disabled { opacity: .45; cursor: not-allowed; }
-  button.primary { background: #61dfb0; color: #122d27; font-weight: 600; }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
   button.primary:hover:not(:disabled) { background: #7ae8c1; }
-  button.danger { background: #6c3535; }
+  button.danger { background: var(--danger); }
+  .buttonLink { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+  .buttonLink.primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .buttonLink.primary:hover { background: #7ae8c1; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
   .row > label { flex: 1 1 220px; margin: 0; }
   .row > button { flex: 0 0 auto; }
@@ -70,7 +83,7 @@
   .tagGroup { margin-top: 10px; }
   .tagGroup h3 { margin-bottom: 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 7px; }
-  .chip { background: #34445d; color: #eef4f6; padding: 7px 11px; font-size: .9rem; }
+  .chip { background: #34445d; color: #eef4f6; padding: 8px 12px; font-size: .9rem; min-height: 44px; }
   .chip.chosen { background: #61dfb0; color: #122d27; font-weight: 600; }
   .chip.custom { background: #3e5f74; }
   .chip.custom.chosen { background: #9ee8ff; color: #103040; }
@@ -93,6 +106,9 @@
   .recordControls { display: grid; gap: 12px; }
   .recordControls audio { margin: 4px 0; }
   .mobileButton { min-height: 48px; }
+  .entryCard { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .entryCard h2 { margin: 0 0 4px; }
+  .entryCard .buttonLink { min-height: 48px; padding: 12px 18px; flex: 0 0 auto; }
   footer { color: #93a6bd; font-size: .84rem; padding: 10px 4px 30px; }
   [hidden] { display: none !important; }
   @media (max-width: 900px) {
@@ -101,6 +117,15 @@
     .queueList { max-height: 320px; }
     .sessionGrid { grid-template-columns: 1fr; }
   }
+  @media (max-width: 640px) {
+    main { padding: 12px 12px 36px; }
+    section, header { padding: 16px; border-radius: 14px; margin: 12px 0; }
+    h1 { font-size: 1.42rem; }
+    .pageNav { width: 100%; }
+    .pageNav a { flex: 1; min-height: 44px; }
+    .entryCard .buttonLink { width: 100%; }
+    .actions button { flex: 1 1 140px; }
+  }
 </style>
 </head>
 <body>
@@ -108,6 +133,10 @@
   <header>
     <h1>声鉴娱乐标注台</h1>
     <p class="muted">本地批量音频 · 多选/自定义标签 · 自动保存进度 · 可备份、可重开</p>
+    <nav class="pageNav" aria-label="页面导航">
+      <a href="index.html" aria-current="page">批量导入</a>
+      <a href="recording.html">录音标注</a>
+    </nav>
     <div class="notice">
       音频只在本机浏览器读取，<strong>不会上传</strong>，也不会请求外部服务或生产后端。标签来自未审定词表，仅供娱乐/研究参考，<strong>不是鉴定结果或模型真值</strong>。
     </div>
@@ -132,19 +161,16 @@
     <p class="muted small">会话与标签保存在 localStorage；录音 Blob 保存在本机 IndexedDB 并按 recording_id 关联。导入的音频刷新后仍需重新选择；录音可自动恢复。浏览器存储空间不是永久备份。</p>
   </section>
 
-  <section>
-    <h2>2. 直接录音</h2>
-    <p class="muted small">录音只保存在此浏览器本机。导出完整备份会包含声音，请妥善保管。录制本人声音，或确认录音中每位可识别参与者均已同意。浏览器录音需要 HTTPS 或 localhost；file:// 通常不可用。</p>
-    <div class="inline"><input id="consentCheck" type="checkbox"><label for="consentCheck">我已向参与者说明用途、本地保存及导出包含声音，并取得录音同意。</label></div>
-    <div class="recordControls">
-      <div class="row"><button id="startRecordBtn" class="primary mobileButton" type="button">开始录音</button><button id="stopRecordBtn" class="mobileButton" type="button" disabled>停止录音</button><button id="saveRecordingBtn" class="mobileButton" type="button" disabled>保存录音并标注</button><button id="discardRecordingBtn" class="danger mobileButton" type="button" disabled>丢弃 / 重录</button></div>
-      <audio id="recordPreview" controls playsinline hidden></audio>
-      <p id="recordStatus" class="muted small" role="status">录音尚未开始。选择同意后录制。</p>
+  <section class="entryCard">
+    <div>
+      <h2>直接录音并标注</h2>
+      <p class="muted small" style="margin-bottom:0">需要麦克风与 HTTPS/localhost。录音只保存在本机，可试听、重录，保存后立即标注。</p>
     </div>
+    <a class="buttonLink primary" href="recording.html">前往录音标注 →</a>
   </section>
 
   <section>
-    <h2>3. 导入本地音频</h2>
+    <h2>2. 导入本地音频</h2>
     <div id="dropzone" class="importZone">
       <p>把音频文件拖到这里，或：</p>
       <label class="fileBtn">选择音频文件（可多选）
@@ -232,7 +258,7 @@
   </div>
 
   <section>
-    <h2>4. 导出与备份</h2>
+    <h2>3. 导出与备份</h2>
     <p class="muted small">
       导出内容来自当前内存状态，并会先尝试保存到本机。JSON 与 CSV 包含队列中的全部记录（未标注 / 草稿 / 已确认），均标记为 <code>unreviewed</code> / <code>training_enabled=false</code>；不会包含音频本身。
     </p>
@@ -306,20 +332,12 @@
     importBackupBtn: $('importBackupBtn'),
     backupInput: $('backupInput'),
     exportFullBackupBtn: $('exportFullBackupBtn'),
-    consentCheck: $('consentCheck'),
-    startRecordBtn: $('startRecordBtn'),
-    stopRecordBtn: $('stopRecordBtn'),
-    saveRecordingBtn: $('saveRecordingBtn'),
-    discardRecordingBtn: $('discardRecordingBtn'),
-    recordPreview: $('recordPreview'),
-    recordStatus: $('recordStatus'),
     exportStatus: $('exportStatus'),
     taxonomyVersion: $('taxonomyVersion')
   };
 
   const STORE_PREFIX = 'voice-label:';
   const META_KEY = 'voice-label-meta';
-  const CONSENT_VERSION = 'recording-consent-v1';
   const RECORDING_DB = 'voice-label-recordings-v1';
   const FILTER_LABELS = { all: '全部', unlabeled: '未标注', draft: '草稿', confirmed: '已确认' };
   const STATUS_TEXT = { confirmed: '已确认', draft: '草稿', unlabeled: '未标注' };
@@ -341,15 +359,6 @@
   let saveTimer = null;
   let storageAvailable = true;
   let importing = false;
-  let recorder = null;
-  let recordingStream = null;
-  let recordingChunks = [];
-  let pendingRecording = null;
-  let previewUrl = null;
-  let recordedConsent = null;
-  let recorderFailed = false;
-  let recordingGeneration = 0;
-  let savingRecording = false;
   const MAX_FULL_BACKUP_BYTES = 100 * 1024 * 1024;
 
   els.taxonomyVersion.textContent = C.TAXONOMY.version;
@@ -509,16 +518,6 @@
     });
   }
 
-  async function putRecording(record) {
-    const db = await openRecordingDb();
-    return new Promise(function (resolve, reject) {
-      const tx = db.transaction('recordings', 'readwrite');
-      tx.objectStore('recordings').put(record);
-      tx.oncomplete = function () { db.close(); resolve(); };
-      tx.onerror = tx.onabort = function () { db.close(); reject(tx.error || new Error('录音保存失败，可能是本机空间不足。')); };
-    });
-  }
-
   async function getRecording(id) {
     const db = await openRecordingDb();
     return new Promise(function (resolve, reject) {
@@ -563,166 +562,6 @@
   }
 
   async function putRecordings(records) { return writeRecordingChanges(records, []); }
-
-  async function startRecording() {
-    if (pendingRecording) {
-      els.recordStatus.textContent = '请先保存或丢弃当前待处理试听录音，再开始新录音。';
-      return;
-    }
-    if (!els.consentCheck.checked) { els.recordStatus.textContent = '请先确认已取得参与者同意，并说明本地保存与导出风险。'; return; }
-    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-      els.recordStatus.textContent = '此浏览器环境不支持录音。请用 Android Chrome/Edge 经 HTTPS 或 localhost 打开，并确认麦克风权限。'; return;
-    }
-    els.startRecordBtn.disabled = true;
-    const generation = ++recordingGeneration;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (generation !== recordingGeneration) {
-        stream.getTracks().forEach(function (track) { track.stop(); });
-        return;
-      }
-      recordingStream = stream;
-      let mimeType = '';
-      ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].some(function (type) {
-        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) { mimeType = type; return true; }
-        return false;
-      });
-      recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType: mimeType } : undefined);
-      recordingChunks = [];
-      recorderFailed = false;
-      recordedConsent = { at: new Date().toISOString(), version: CONSENT_VERSION };
-      recordingStream.getTracks().forEach(function (track) {
-        track.addEventListener('ended', function () {
-          if (recorder && recorder.state !== 'inactive') {
-            recorderFailed = true;
-            recordingChunks = [];
-            els.recordStatus.textContent = '麦克风轨道意外中断；此段录音作废，请重新授权后再录。';
-            stopRecording();
-          }
-        }, { once: true });
-      });
-      recorder.ondataavailable = function (event) { if (event.data && event.data.size) recordingChunks.push(event.data); };
-      recorder.onerror = function () {
-        recorderFailed = true;
-        els.recordStatus.textContent = '录音发生错误，未保存此段录音。请检查麦克风权限后重试。';
-        recordingChunks = [];
-        pendingRecording = null;
-        if (recorder && recorder.state !== 'inactive') { try { recorder.stop(); } catch (error) { stopRecordingTracks(); } }
-        else stopRecordingTracks();
-        els.saveRecordingBtn.disabled = true;
-        els.discardRecordingBtn.disabled = true;
-      };
-      recorder.onstop = function () {
-        stopRecordingTracks();
-        if (recorderFailed || !recordingChunks.length) {
-          recordingChunks = [];
-          pendingRecording = null;
-          els.recordPreview.hidden = true;
-          els.saveRecordingBtn.disabled = true;
-          els.discardRecordingBtn.disabled = true;
-          return;
-        }
-        const type = recorder.mimeType || (recordingChunks[0] && recordingChunks[0].type) || 'audio/webm';
-        pendingRecording = new Blob(recordingChunks, { type: type });
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        previewUrl = URL.createObjectURL(pendingRecording);
-        els.recordPreview.src = previewUrl;
-        els.recordPreview.hidden = false;
-        els.saveRecordingBtn.disabled = false;
-        els.discardRecordingBtn.disabled = false;
-        els.startRecordBtn.disabled = true;
-        els.recordStatus.textContent = '录音已停止。请试听；满意后选择标签并保存，不满意可丢弃后重录。';
-        stopRecordingTracks();
-      };
-      recorder.start();
-      els.startRecordBtn.disabled = true;
-      els.stopRecordBtn.disabled = false;
-      els.recordStatus.textContent = '录音中……请在安静环境下采集。';
-    } catch (error) {
-      stopRecordingTracks();
-      const msg = error && error.name === 'NotAllowedError' ? '麦克风权限被拒绝。请在浏览器站点设置中允许麦克风，再重试。' : '无法启动录音：' + (error.message || error.name || '未知错误');
-      els.recordStatus.textContent = msg;
-    }
-  }
-
-  function stopRecordingTracks() {
-    if (recordingStream) recordingStream.getTracks().forEach(function (track) { track.stop(); });
-    recordingStream = null;
-    els.startRecordBtn.disabled = false;
-    els.stopRecordBtn.disabled = true;
-  }
-
-  function stopRecording() {
-    if (recorder && recorder.state !== 'inactive') {
-      try { recorder.stop(); } catch (error) { stopRecordingTracks(); }
-    } else stopRecordingTracks();
-  }
-
-  function interruptRecording() {
-    recordingGeneration += 1;
-    recorderFailed = true;
-    if (recorder && recorder.state !== 'inactive') {
-      try { recorder.stop(); } catch (error) { /* tracks are stopped below */ }
-    }
-    stopRecordingTracks();
-    recordingChunks = [];
-    els.recordStatus.textContent = '页面离开时录音已中断，未保存。';
-  }
-
-  function discardRecording() {
-    pendingRecording = null;
-    recordingChunks = [];
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    previewUrl = null;
-    els.recordPreview.removeAttribute('src');
-    els.recordPreview.hidden = true;
-    els.saveRecordingBtn.disabled = true;
-    els.discardRecordingBtn.disabled = true;
-    els.startRecordBtn.disabled = false;
-    els.recordStatus.textContent = '录音已丢弃，可以重新录制。';
-  }
-
-  async function saveRecordingAsClip() {
-    if (!pendingRecording || savingRecording) return;
-    savingRecording = true;
-    els.saveRecordingBtn.disabled = true;
-    els.discardRecordingBtn.disabled = true;
-    const id = 'rec-' + (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-    const fingerprint = 'fallback:' + encodeURIComponent(id) + '|' + pendingRecording.size + '|' + Date.now();
-    const duration = Number.isFinite(els.recordPreview.duration) ? els.recordPreview.duration : null;
-    const record = { id: id, blob: pendingRecording, mime_type: pendingRecording.type, created_at: new Date().toISOString() };
-    try {
-      await putRecording(record);
-      const clip = C.createClip({ fingerprint: fingerprint, file_name: id + (pendingRecording.type.indexOf('ogg') >= 0 ? '.ogg' : pendingRecording.type.indexOf('mp4') >= 0 ? '.m4a' : '.webm'), size_bytes: pendingRecording.size, duration_seconds: duration, recording_id: id, source: 'microphone', consent_at: recordedConsent.at, consent_version: recordedConsent.version });
-      clip.heard_audio = true;
-      state.clips.push(clip);
-      attachedFiles.set(fingerprint, new File([pendingRecording], clip.file_name, { type: pendingRecording.type }));
-      currentIndex = state.clips.length - 1;
-      if (!saveState()) {
-        state.clips.pop();
-        attachedFiles.delete(fingerprint);
-        currentIndex = state.clips.length ? state.clips.length - 1 : -1;
-        try {
-          await writeRecordingChanges([], [id]);
-        } catch (rollbackError) {
-          els.recordStatus.textContent = '标签保存失败，且无法清理孤立录音：' + (rollbackError.message || '请检查本机存储并导出会话备份。');
-          renderAll();
-          return;
-        }
-        renderAll();
-        throw new Error('本机无法保存会话标签（localStorage 不可用）；录音已回滚，请启用本机存储后重试。');
-      }
-      renderAll();
-      discardRecording();
-      els.recordStatus.textContent = '录音与标签已关联并保存在本机。可在下方标注；完整备份可同时导出声音。';
-    } catch (error) {
-      els.recordStatus.textContent = '保存失败：' + (error.message || '本机空间可能不足。录音仍在试听区，请先导出/重试。');
-      els.saveRecordingBtn.disabled = false;
-      els.discardRecordingBtn.disabled = false;
-    } finally {
-      savingRecording = false;
-    }
-  }
 
   // ---------- audio ----------
 
@@ -1547,10 +1386,6 @@
     els.nextBtn.addEventListener('click', function () { goTo(currentIndex + 1); });
     els.confirmBtn.addEventListener('click', confirmCurrent);
     els.reopenBtn.addEventListener('click', reopenCurrent);
-    els.startRecordBtn.addEventListener('click', startRecording);
-    els.stopRecordBtn.addEventListener('click', stopRecording);
-    els.saveRecordingBtn.addEventListener('click', saveRecordingAsClip);
-    els.discardRecordingBtn.addEventListener('click', discardRecording);
 
     els.addCustomBtn.addEventListener('click', addCustomFromInput);
     els.customInput.addEventListener('keydown', function (event) {
@@ -1643,8 +1478,8 @@
       }
     });
 
-    window.addEventListener('pagehide', function () { interruptRecording(); flushSave(); });
-    window.addEventListener('beforeunload', function () { interruptRecording(); flushSave(); });
+    window.addEventListener('pagehide', function () { flushSave(); });
+    window.addEventListener('beforeunload', function () { flushSave(); });
   }
 
   // ---------- init ----------
