@@ -20,16 +20,17 @@
   'use strict';
 
   const APP_NAME = 'voice-label-tool';
-  const APP_VERSION = '0.1.0';
-  const DATASET_SCHEMA = 'label-observations-v1';
-  const SESSION_SCHEMA = 'voice-label-session-v1';
-  const BACKUP_SCHEMA = 'voice-label-session-backup-v1';
-  const TOOL_VOCAB_VERSION = 'voice-label-vocab-0.2';
+  const APP_VERSION = '0.2.0';
+  const DATASET_SCHEMA = 'label-observations-v2';
+  const SESSION_SCHEMA = 'voice-label-session-v2';
+  const BACKUP_SCHEMA = 'voice-label-session-backup-v2';
+  const TOOL_VOCAB_VERSION = 'voice-label-vocab-0.3';
   const EXTRA_VARIANTS = Object.freeze(['极品少女御姐', '极御姐']);
 
-  // 与 taxonomy-research/schema.json 保持一致；测试会比对，避免词表漂移。
+  // 与 taxonomy-research/schema.json 保持一致（legacy 父类）；测试会比对，避免词表漂移。
   const TAXONOMY = Object.freeze({
-    version: 'circle-taxonomy-0.3-draft',
+    version: 'circle-taxonomy-0.4-draft',
+    // 旧父类（仅兼容，不再新增）。
     parents: Object.freeze([
       '正太', '少年', '青年', '青叔', '大叔',
       '萝莉', '少萝', '少女', '少御', '御姐'
@@ -40,8 +41,39 @@
       '公子音', '叔攻', '御妈', '妈音'
     ]),
     texture_tags: Object.freeze(['清亮', '厚重', '气声', '颗粒感', '沙哑', '鼻音']),
-    style_tags: Object.freeze(['温柔', '清冷', '活泼', '沉稳', '慵懒', '强势'])
+    style_tags: Object.freeze(['温柔', '清冷', '活泼', '沉稳', '慵懒', '强势']),
+    // 新：男女分开的主音/副音词表。voice_domain 由用户手动选择，不自动推断。
+    domains: Object.freeze({
+      male: Object.freeze({
+        label: '男声向音色',
+        primaries: Object.freeze(['正太', '少年', '青年', '青叔', '大叔', '公子', '糙汉']),
+        variants: Object.freeze(['温青', '青受', '破碎青年', '极品破碎青年音', '奶太', '少正', '叔攻'])
+      }),
+      female: Object.freeze({
+        label: '女声向音色',
+        primaries: Object.freeze(['萝莉', '少萝', '少女', '少御', '御姐', '女王', '妈']),
+        variants: Object.freeze(['温御', '青御', '大御', '烟嗓御姐', '骚御', '霸御', '妖御', '冷御', '软御', '清御', '御妈', '极品少女御姐', '极御姐'])
+      }),
+      // 两边共用的复合音，只存一份，不计入任何一边的主音。
+      shared: Object.freeze(['辣条音', '超级辣条音', '超级极品辣条音'])
+    })
   });
+
+  const VOICE_DOMAINS = Object.freeze(['male', 'female']);
+
+  function domainPrimaries(domain) {
+    const entry = TAXONOMY.domains[domain];
+    return entry ? entry.primaries : [];
+  }
+
+  function domainVariants(domain) {
+    const entry = TAXONOMY.domains[domain];
+    return entry ? entry.variants : [];
+  }
+
+  function allNewPrimaries() {
+    return [...TAXONOMY.domains.male.primaries, ...TAXONOMY.domains.female.primaries];
+  }
 
   const LABEL_GROUPS = Object.freeze(['parents', 'variants', 'textures', 'styles', 'custom']);
   const VOICE_MODES = Object.freeze({
@@ -63,7 +95,9 @@
   const CSV_EXTRA_COLUMNS = Object.freeze([
     'custom_tags', 'unsure', 'label_confirmed', 'fingerprint', 'file_name',
     'relative_path', 'duration_seconds', 'size_bytes', 'note', 'heard_audio',
-    'confirmed_at', 'updated_at', 'primary_voice', 'primary_code', 'primary_seq'
+    'confirmed_at', 'updated_at', 'primary_voice', 'primary_code', 'primary_seq',
+    'voice_domain', 'voice_domain_label', 'primary_is_legacy', 'legacy_primary',
+    'label_source', 'auto_inference_used', 'label_version'
   ]);
   const CSV_COLUMNS = Object.freeze([...CSV_CANONICAL_COLUMNS, ...CSV_EXTRA_COLUMNS]);
 
@@ -160,9 +194,15 @@
       consent_at: toTimestampOr(meta.consent_at, ''),
       consent_version: cleanString(meta.consent_version, 40),
       labels: emptyLabels(),
+      // 新：男女分开主音。voice_domain 永远由用户手动点击选择，不自动推断。
+      voice_domain: '',
+      voice_domain_source: 'legacy_unassigned',
       primary: '',
       primary_seq: null,
       primary_seq_of: '',
+      primary_is_legacy: false,
+      legacy_primary: '',
+      label_version: TAXONOMY.version,
       voice_mode: 'unknown',
       unsure: false,
       note: '',
@@ -257,6 +297,30 @@
     const updatedAt = toTimestampOr(raw.updated_at, timestamp);
     const confirmed = raw.confirmed === true;
 
+    const voiceDomain = VOICE_DOMAINS.includes(raw.voice_domain) ? raw.voice_domain : '';
+    const newPrimaries = allNewPrimaries();
+    // 新主音：必须属于合法新词表，且与 voice_domain 一致；否则视为未设置。
+    let primary = '';
+    let primarySeqOf = '';
+    let primaryIsLegacy = false;
+    let legacyPrimary = cleanString(raw.legacy_primary, 80);
+    if (voiceDomain && newPrimaries.includes(raw.primary) && domainPrimaries(voiceDomain).includes(raw.primary)) {
+      primary = raw.primary;
+      primarySeqOf = newPrimaries.includes(raw.primary_seq_of) ? raw.primary_seq_of : primary;
+    } else if (TAXONOMY.parents.includes(raw.primary)) {
+      // 旧父类主音：保留为 legacy，不丢弃，不自动迁移到新词表。
+      primary = raw.primary;
+      primarySeqOf = TAXONOMY.parents.includes(raw.primary_seq_of) ? raw.primary_seq_of : primary;
+      primaryIsLegacy = true;
+      if (!legacyPrimary) legacyPrimary = raw.primary;
+    } else if (raw.primary_is_legacy === true && typeof raw.primary === 'string' && raw.primary) {
+      // 未知的旧 primary：保留原值到 legacy_primary，不丢标签，primary 留空不参与编号。
+      primary = '';
+      primarySeqOf = '';
+      primaryIsLegacy = true;
+      if (!legacyPrimary) legacyPrimary = cleanString(raw.primary, 80);
+    }
+
     return {
       fingerprint: raw.fingerprint,
       file_name: cleanString(raw.file_name, 500),
@@ -269,9 +333,14 @@
       consent_at: toTimestampOr(raw.consent_at, ''),
       consent_version: cleanString(raw.consent_version, 40),
       labels,
-      primary: TAXONOMY.parents.includes(raw.primary) ? raw.primary : '',
+      voice_domain: voiceDomain,
+      voice_domain_source: raw.voice_domain_source === 'manual_selection' ? 'manual_selection' : 'legacy_unassigned',
+      primary: primary,
       primary_seq: Number.isSafeInteger(raw.primary_seq) && raw.primary_seq > 0 ? raw.primary_seq : null,
-      primary_seq_of: TAXONOMY.parents.includes(raw.primary_seq_of) ? raw.primary_seq_of : '',
+      primary_seq_of: primarySeqOf,
+      primary_is_legacy: primaryIsLegacy,
+      legacy_primary: legacyPrimary,
+      label_version: cleanString(raw.label_version, 60) || TAXONOMY.version,
       voice_mode: voiceMode,
       unsure: raw.unsure === true,
       note: cleanString(raw.note, 1000),
@@ -301,7 +370,7 @@
       }
     }
     const counters = {};
-    for (const parent of TAXONOMY.parents) {
+    for (const parent of [...TAXONOMY.parents, ...allNewPrimaries()]) {
       const value = raw.primary_counters && raw.primary_counters[parent];
       counters[parent] = Number.isSafeInteger(value) && value > 0 ? value : 0;
     }
@@ -368,16 +437,18 @@
   }
 
   /**
-   * 确认门槛：标注代号 + 曾经完整播放到结尾 + 至少一个标签或“无法确定”。
-   * 备注和声线状态单独不算标签，避免空选即确认。
+   * 确认门槛：标注代号 + 曾经完整播放到结尾 + 至少一个主音/无法确定。
+   * 简化版确认门槛：有效主音（新词表或旧 legacy）或勾选"无法确定"即可，
+   * 不要求必须选标注代号才能保存标签本身（标注代号仍用于确认归档）。
    */
   function canConfirm(clip, annotator) {
     if (!clip) return { ok: false, reason: '没有选中的音频。' };
     if (clip.confirmed) return { ok: false, reason: '该条已经确认；如需修改请先重新编辑。' };
     if (!cleanString(annotator, 200)) return { ok: false, reason: '请先填写标注代号。' };
     if (clip.heard_audio !== true) return { ok: false, reason: '请先完整播放到结尾。' };
-    if ((!clip.primary || clip.primary_seq_of !== clip.primary || !clip.primary_seq) && clip.unsure !== true) {
-      return { ok: false, reason: '请选择一个主音（会立即编号），或勾选“无法确定”。' };
+    const hasValidPrimary = Boolean(clip.primary) && clip.primary_seq_of === clip.primary && Boolean(clip.primary_seq);
+    if (!hasValidPrimary && clip.unsure !== true) {
+      return { ok: false, reason: '请选择一个主音（会立即编号），或勾选"无法确定"。' };
     }
     return { ok: true, reason: '' };
   }
@@ -387,8 +458,16 @@
       ? clip.primary + '音-' + String(clip.primary_seq).padStart(3, '0') : '';
   }
 
+  /**
+   * 设置主音。新主音必须先设置 clip.voice_domain（手动选择），且 name 必须属于该
+   * domain 的词表；旧父类主音仍可通过传入 { legacy: true } 设置，用于兼容迁移向导。
+   */
   function setPrimary(session, clip, name, now) {
-    if (!session || !clip || clip.confirmed || (name && !TAXONOMY.parents.includes(name))) return false;
+    if (!session || !clip || clip.confirmed) return false;
+    if (name) {
+      if (!clip.voice_domain) return false; // 必须先选方向，不自动推断
+      if (!domainPrimaries(clip.voice_domain).includes(name)) return false;
+    }
     const chosen = clip.primary === name ? '' : name;
     if (chosen && (clip.primary_seq_of !== chosen || !clip.primary_seq)) {
       if (!session.primary_counters) session.primary_counters = {};
@@ -400,6 +479,42 @@
       clip.primary_seq_of = chosen;
     }
     clip.primary = chosen;
+    if (chosen) clip.primary_is_legacy = false;
+    // 不清空 primary_seq_of/primary_seq：原编号保留不复用，再次选回同一主音会重用旧编号。
+    touchClip(clip, now);
+    return true;
+  }
+
+  /**
+   * 设置方向（男声/女声）。切换方向会清空当前新主音选择（旧 legacy 主音不受影响），
+   * 避免跨方向残留错位标签；调用方应在切换前做二次确认。
+   */
+  function setVoiceDomain(clip, domain, now) {
+    if (!clip || clip.confirmed) return false;
+    if (domain && !VOICE_DOMAINS.includes(domain)) return false;
+    const next = domain || '';
+    if (clip.voice_domain === next) return true;
+    clip.voice_domain = next;
+    clip.voice_domain_source = next ? 'manual_selection' : 'legacy_unassigned';
+    // 方向改变时，若当前主音不属于新方向，清空（不自动迁移/不自动猜）。
+    if (clip.primary && !clip.primary_is_legacy && (!next || !domainPrimaries(next).includes(clip.primary))) {
+      clip.primary = '';
+      clip.primary_seq_of = '';
+    }
+    touchClip(clip, now);
+    return true;
+  }
+
+  function setUnsure(clip, value, now) {
+    if (!clip || clip.confirmed) return false;
+    clip.unsure = value === true;
+    if (clip.unsure) {
+      // 无法确定与主音互斥：清空新主音；legacy 主音保留供查看。
+      if (clip.primary && !clip.primary_is_legacy) {
+        clip.primary = '';
+        clip.primary_seq_of = '';
+      }
+    }
     touchClip(clip, now);
     return true;
   }
@@ -414,10 +529,34 @@
     return { ok: true, reason: '' };
   }
 
-  function groupByPrimary(clips) {
-    const groups = [...TAXONOMY.parents, '未归类'].map((name) => ({ name, clips: [] }));
+  /**
+   * 删除一个 clip（从 session.clips 数组移除）。只操作内存结构；
+   * 调用方负责同时删除 IndexedDB 录音 blob（先写标签变更成功后再删 blob）。
+   * 返回被移除的 clip（含 recording_id，供调用方清理），不存在返回 null。
+   */
+  function removeClip(session, fingerprint) {
+    if (!session || !Array.isArray(session.clips)) return null;
+    const index = session.clips.findIndex((c) => c.fingerprint === fingerprint);
+    if (index < 0) return null;
+    const [removed] = session.clips.splice(index, 1);
+    session.updated_at = nowIso();
+    return removed;
+  }
+
+  /**
+   * 按声音方向（domain）与主音分组，用于男/女两个独立页面的队列展示。
+   * domain 为 'male' | 'female'；只返回属于该方向的主音分组 + 未归类。
+   * 不属于该方向的 clip（包括另一方向、旧档、未选方向）不出现在结果里，
+   * 调用方应单独展示"其它/旧档"列表。
+   */
+  function groupByPrimary(clips, domain) {
+    const names = domain ? domainPrimaries(domain) : [...TAXONOMY.parents];
+    const groups = [...names, '未归类'].map((name) => ({ name, clips: [] }));
     for (const clip of Array.isArray(clips) ? clips : []) {
-      const index = TAXONOMY.parents.indexOf(clip.primary);
+      // 排除已明确归入"另一方向"的条目；未选方向（voice_domain === ''）的新录音/导入音频
+      // 仍应在两页都可见，落入"未归类"分组，供用户在本页手动认领（点选主音即认领），不自动分配。
+      if (domain && clip.voice_domain && clip.voice_domain !== domain) continue;
+      const index = names.indexOf(clip.primary);
       groups[index < 0 ? groups.length - 1 : index].clips.push(clip);
     }
     for (const group of groups) group.clips.sort((a, b) =>
@@ -477,10 +616,15 @@
       duration_seconds: clip.duration_seconds,
       size_bytes: clip.size_bytes,
       last_modified: clip.last_modified,
+      voice_domain: clip.voice_domain || '',
+      voice_domain_label: clip.voice_domain ? TAXONOMY.domains[clip.voice_domain].label : '',
+      voice_domain_source: clip.voice_domain_source || 'legacy_unassigned',
       primary_voice: clip.primary || '',
       primary_voice_label: clip.primary ? clip.primary + '音' : '',
       primary_seq: clip.primary_seq_of === clip.primary && clip.primary ? clip.primary_seq : null,
       primary_code: primaryCode(clip),
+      primary_is_legacy: clip.primary_is_legacy === true,
+      legacy_primary: clip.legacy_primary || null,
       parent_candidates: [...clip.labels.parents],
       subtype_candidates: [...clip.labels.variants],
       texture_tags: [...clip.labels.textures],
@@ -503,6 +647,9 @@
       label_review: 'unreviewed',
       training_enabled: false,
       blind_attested: false,
+      label_source: 'manual',
+      auto_inference_used: false,
+      legacy_taxonomy_version: clip.primary_is_legacy ? TAXONOMY.version : null,
       annotator_id: session && session.annotator ? session.annotator : ''
     };
   }
@@ -520,7 +667,13 @@
         parents: [...TAXONOMY.parents],
         variants: [...TAXONOMY.variants, ...EXTRA_VARIANTS],
         texture_tags: [...TAXONOMY.texture_tags],
-        style_tags: [...TAXONOMY.style_tags]
+        style_tags: [...TAXONOMY.style_tags],
+        domains: {
+          male: { label: TAXONOMY.domains.male.label, primaries: [...TAXONOMY.domains.male.primaries], variants: [...TAXONOMY.domains.male.variants] },
+          female: { label: TAXONOMY.domains.female.label, primaries: [...TAXONOMY.domains.female.primaries], variants: [...TAXONOMY.domains.female.variants] },
+          shared: [...TAXONOMY.domains.shared]
+        },
+        legacy: { parents: [...TAXONOMY.parents], variants: [...TAXONOMY.variants, ...EXTRA_VARIANTS] }
       },
       exported_at: now || nowIso(),
       audio_policy: 'local_only_no_upload',
@@ -621,7 +774,14 @@
         clip.updated_at,                         // updated_at
         clip.primary || '',                       // primary_voice (local candidate)
         primaryCode(clip),                        // primary_code
-        primaryCode(clip) ? clip.primary_seq : '' // primary_seq
+        primaryCode(clip) ? clip.primary_seq : '', // primary_seq
+        clip.voice_domain || '',                                               // voice_domain
+        clip.voice_domain ? TAXONOMY.domains[clip.voice_domain].label : '',    // voice_domain_label
+        clip.primary_is_legacy ? 'true' : 'false',                            // primary_is_legacy
+        clip.legacy_primary || '',                                             // legacy_primary
+        'manual',                                                              // label_source
+        'false',                                                               // auto_inference_used
+        clip.label_version || TAXONOMY.version                                // label_version
       ];
       rows.push(values.map(csvEscape).join(','));
     }
@@ -637,6 +797,7 @@
     TOOL_VOCAB_VERSION,
     EXTRA_VARIANTS,
     TAXONOMY,
+    VOICE_DOMAINS,
     LABEL_GROUPS,
     VOICE_MODES,
     CSV_COLUMNS,
@@ -646,6 +807,9 @@
     fallbackFingerprint,
     isValidFingerprint,
     sampleIdFor,
+    domainPrimaries,
+    domainVariants,
+    allNewPrimaries,
     createClip,
     mergeClipMeta,
     mergeImport,
@@ -659,7 +823,10 @@
     canConfirm,
     primaryCode,
     setPrimary,
+    setVoiceDomain,
+    setUnsure,
     confirmClip,
+    removeClip,
     groupByPrimary,
     toggleLabel,
     addCustomTag,
