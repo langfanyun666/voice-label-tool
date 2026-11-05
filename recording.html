@@ -80,7 +80,7 @@
   .chip.custom.chosen { background: #9ee8ff; color: #103040; }
   .customRow { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
   .customRow input { flex: 1 1 220px; }
-  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; position: sticky; bottom: 0; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); background: var(--panel); z-index: 2; }
   .empty { border: 1px dashed #3a4d69; border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); }
   .fileInfo { font-size: .84rem; color: #9fb1c8; overflow-wrap: anywhere; }
   .shortcuts { font-size: .84rem; color: #9fb1c8; }
@@ -184,6 +184,7 @@
       <p id="playHint" class="muted small"></p>
       <p id="reattachHint" class="muted small" hidden>无法读取本机录音数据：可能已被浏览器清理，或当前不是保存它的浏览器/站点。标签仍可查看，但无法试听。</p>
 
+      <div id="primaryArea" class="tagGroup" role="radiogroup" aria-label="主音，单选"></div>
       <div id="tagArea"></div>
 
       <div class="tagGroup">
@@ -217,9 +218,10 @@
         <button id="prevBtn" type="button">← 上一条</button>
         <button id="confirmBtn" type="button" class="primary">确认并下一条</button>
         <button id="reopenBtn" type="button" hidden>重新编辑本条</button>
-        <button id="nextBtn" type="button">下一条 →</button>
+        <button id="nextBtn" type="button">跳过（不确认），下一条 →</button>
       </div>
       <p id="confirmHint" class="muted small"></p>
+      <p id="saveHint" class="muted small" role="status"></p>
       <p id="clipMessage" class="okText" role="status"></p>
     </div>
   </section>
@@ -279,6 +281,7 @@
     audio: $('audio'),
     playHint: $('playHint'),
     reattachHint: $('reattachHint'),
+    primaryArea: $('primaryArea'),
     tagArea: $('tagArea'),
     customInput: $('customInput'),
     addCustomBtn: $('addCustomBtn'),
@@ -291,6 +294,7 @@
     confirmBtn: $('confirmBtn'),
     reopenBtn: $('reopenBtn'),
     confirmHint: $('confirmHint'),
+    saveHint: $('saveHint'),
     clipMessage: $('clipMessage'),
     exportJsonBtn: $('exportJsonBtn'),
     exportCsvBtn: $('exportCsvBtn'),
@@ -307,8 +311,8 @@
   const STATUS_TEXT = { confirmed: '已确认', draft: '草稿', unlabeled: '未标注' };
 
   const TAG_GROUPS = [
-    { group: 'parents', values: C.TAXONOMY.parents, title: '父类候选', hint: '可多选，也可以不选。' },
-    { group: 'variants', values: C.TAXONOMY.variants, title: '细分候选（未审定词表）', hint: '可多选；与父类不互斥。' },
+    { group: 'parents', values: [], title: '旧父类候选（仅兼容旧标签）', hint: '不再新增；旧记录原样保留，可手动移除。新的唯一归类请选主音。' },
+    { group: 'variants', values: [...C.TAXONOMY.variants, ...C.EXTRA_VARIANTS], title: '副音 / 复合标签', hint: '可多选，不会自动决定主音。' },
     { group: 'textures', values: C.TAXONOMY.texture_tags, title: '质感', hint: '可多选。' },
     { group: 'styles', values: C.TAXONOMY.style_tags, title: '表达风格', hint: '可多选。' }
   ];
@@ -458,6 +462,8 @@
 
   function showStorageWarning(show) {
     els.storageWarning.hidden = !show;
+    els.saveHint.textContent = show ? '保存失败：当前修改仅在内存，请立即备份。' : '已保存到本机 ' + new Date().toLocaleTimeString('zh-CN');
+    els.saveHint.classList.toggle('errorText', show);
   }
 
   function saveState() {
@@ -641,9 +647,10 @@
         els.discardRecordingBtn.disabled = false;
         els.startRecordBtn.disabled = true;
         els.recordStatus.textContent = '录音已停止。请试听；满意后“保存录音并标注”，不满意可丢弃后重录。';
-        stopRecordingTracks();
       };
-      recorder.start();
+      // Periodic chunks reduce browser-dependent buffering for longer recordings.
+      // onstop still assembles only after the final dataavailable event.
+      recorder.start(1000);
       els.startRecordBtn.disabled = true;
       els.stopRecordBtn.disabled = false;
       els.recordStatus.textContent = '录音中……请在安静环境下采集。';
@@ -690,7 +697,9 @@
     els.saveRecordingBtn.disabled = true;
     els.discardRecordingBtn.disabled = true;
     els.startRecordBtn.disabled = false;
-    els.recordStatus.textContent = '录音已丢弃，可以重新录制。';
+    els.consentCheck.checked = false;
+    recordedConsent = null;
+    els.recordStatus.textContent = '录音已丢弃；下一段请重新确认同意。';
     updateSteps();
   }
 
@@ -727,7 +736,10 @@
       }
       renderAll();
       discardRecording();
-      els.recordStatus.textContent = '录音与标签已关联并保存在本机。请在下方完成标注；完整备份可同时导出声音。';
+      els.recordStatus.textContent = '录音已保存在本机（' + clip.file_name + '）；标签尚待确认。请在下方人工选择主音。下一段录音须重新确认同意。';
+      els.primaryArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const firstPrimary = els.primaryArea.querySelector('button');
+      if (firstPrimary) firstPrimary.focus({ preventScroll: true });
     } catch (error) {
       els.recordStatus.textContent = '保存失败：' + (error.message || '本机空间可能不足。录音仍在试听区，请先导出/重试。');
       els.saveRecordingBtn.disabled = false;
@@ -848,7 +860,7 @@
       const status = C.statusOf(clip);
       const option = document.createElement('option');
       option.value = String(index);
-      option.textContent = (index + 1) + '. ' + (clip.file_name || '未命名录音') +
+      option.textContent = (C.primaryCode(clip) || '未归类') + ' · ' + (clip.file_name || '未命名录音') +
         ' · ' + STATUS_TEXT[status] + ' · ' + formatDuration(clip.duration_seconds);
       els.recordingSelect.append(option);
     });
@@ -856,6 +868,36 @@
     const active = indices.includes(currentIndex) ? currentIndex : indices[0];
     if (active !== currentIndex) currentIndex = active;
     els.recordingSelect.value = String(currentIndex);
+  }
+
+  function renderPrimary(clip) {
+    els.primaryArea.replaceChildren();
+    const heading = document.createElement('h3');
+    heading.textContent = '主音（单选） · ' + (C.primaryCode(clip) || '未归类');
+    els.primaryArea.append(heading);
+    const hint = document.createElement('p');
+    hint.className = 'muted small';
+    hint.textContent = '人工选择后立即分配本会话类别编号；再次点击可取消，原编号保留不复用。';
+    els.primaryArea.append(hint);
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    C.TAXONOMY.parents.forEach(function (name) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chip' + (clip.primary === name ? ' chosen' : '');
+      button.textContent = name + '音';
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', clip.primary === name ? 'true' : 'false');
+      button.disabled = clip.confirmed;
+      button.addEventListener('click', function () {
+        if (currentClip() !== clip || !C.setPrimary(state, clip, name)) return;
+        if (!saveState()) { setClipMessage('主音编号未能写入本机，请备份并检查存储。'); }
+        renderPrimary(clip);
+        afterAnnotationChange(clip);
+      });
+      chips.append(button);
+    });
+    els.primaryArea.append(chips);
   }
 
   function renderTagGroups(clip) {
@@ -954,11 +996,12 @@
 
     els.emptyState.hidden = true;
     els.clipView.hidden = false;
-    els.clipMeta.textContent = metaLine(clip);
+    els.clipMeta.textContent = (C.primaryCode(clip) || '未归类') + ' · 录音已保存在本机 · ' + metaLine(clip);
     els.clipMeta.title = clip.fingerprint;
     setStatusPill(els.clipStatus, clip);
 
     await syncAudio(clip);
+    renderPrimary(clip);
     renderTagGroups(clip);
     renderCustomChips(clip);
 
@@ -1057,7 +1100,7 @@
     const clip = currentClip();
     if (!clip) return;
     state.annotator = C.cleanString(els.annotator.value, 200);
-    const result = C.canConfirm(clip, state.annotator);
+    const result = C.confirmClip(state, clip, state.annotator);
     if (!result.ok) {
       setClipMessage(result.reason);
       updateConfirmState();
@@ -1065,9 +1108,6 @@
     }
 
     const confirmedIndex = currentIndex;
-    clip.confirmed = true;
-    clip.confirmed_at = new Date().toISOString();
-    clip.updated_at = clip.confirmed_at;
 
     const indices = recordingIndices();
     const position = indices.indexOf(confirmedIndex);
