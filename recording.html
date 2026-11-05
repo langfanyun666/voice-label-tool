@@ -1,0 +1,1413 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<title>录音标注 · 声鉴娱乐标注台</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101827; --panel: #1d2a3e; --panel-2: #16243a; --panel-3: #142136;
+    --line: #2f4059; --text: #eef4f6; --muted: #b8c5d7;
+    --accent: #61dfb0; --accent-ink: #122d27; --warn: #ffc36b; --danger: #6c3535;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: auto; padding: 20px 20px 44px; }
+  h1 { margin: 0; font-size: 1.65rem; line-height: 1.25; letter-spacing: .01em; }
+  h2 { margin: 0 0 12px; font-size: 1.18rem; line-height: 1.35; }
+  h3 { margin: 18px 0 8px; font-size: 1rem; }
+  p { margin: 8px 0; }
+  section, header { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 14px 0; }
+  header { background: linear-gradient(135deg, #1d2a3e, #18253a); padding: 22px; }
+  .pageNav { display: flex; gap: 6px; margin-top: 16px; padding: 4px; width: max-content; max-width: 100%; background: var(--panel-3); border: 1px solid var(--line); border-radius: 12px; }
+  .pageNav a { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 8px 16px; border-radius: 9px; color: var(--muted); font-size: .95rem; font-weight: 600; text-decoration: none; transition: background .15s, color .15s; }
+  .pageNav a:hover { background: #22334d; color: var(--text); }
+  .pageNav a[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+  .muted { color: var(--muted); }
+  .small { font-size: .88rem; }
+  .notice { margin-top: 14px; padding: 12px 14px; border-left: 4px solid var(--accent); background: #16283a; border-radius: 8px; color: #d6e4ef; }
+  .notice.warn { border-left-color: var(--warn); background: #2a2318; color: #ffe3b0; }
+  .errorText { color: #ffb4a8; }
+  .okText { color: #74edbd; }
+  label { display: block; margin: 10px 0; }
+  input[type="text"], textarea, select {
+    font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #34445d;
+    background: var(--panel-3); color: var(--text); width: 100%; min-height: 44px;
+  }
+  input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea { min-height: 96px; resize: vertical; }
+  button, .buttonLink { font: inherit; cursor: pointer; padding: 9px 14px; min-height: 44px; border-radius: 9px; border: 0; background: #34445d; color: var(--text); }
+  button:hover:not(:disabled), .buttonLink:hover { background: #41546f; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #7ae8c1; }
+  button.danger { background: var(--danger); }
+  .buttonLink { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+  .buttonLink.primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .buttonLink.primary:hover { background: #7ae8c1; }
+  .sessionGrid { display: grid; grid-template-columns: 1.2fr 1fr auto; gap: 12px; align-items: end; }
+  .sessionGrid label { margin: 0; }
+  .inline { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0; }
+  .inline input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); flex: 0 0 auto; }
+  .inline label { margin: 0; }
+  .steps { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0; margin: 12px 0 4px; counter-reset: step; }
+  .steps li { counter-increment: step; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 6px 8px; background: var(--panel-3); border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: .84rem; text-align: center; }
+  .steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #34445d; color: var(--text); font-size: .72rem; font-weight: 700; flex: 0 0 auto; }
+  .steps li.active { border-color: var(--accent); color: var(--text); background: #1b3344; }
+  .steps li.active::before { background: var(--accent); color: var(--accent-ink); }
+  .steps li.done { border-color: #3c7f6a; color: var(--accent); }
+  .recordControls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .recordControls button { min-height: 56px; font-size: 1rem; }
+  #recordPreview, #audio { width: 100%; margin: 14px 0 4px; }
+  .progressWrap { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .9rem; margin-top: 12px; }
+  .progressTrack { flex: 1; height: 8px; background: var(--panel-3); border-radius: 99px; overflow: hidden; }
+  .progressTrack span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
+  .clipHead { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .clipHead h2 { margin: 0; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: .8rem; font-weight: 600; }
+  .pill.confirmed { background: var(--accent); color: var(--accent-ink); }
+  .pill.draft { background: var(--warn); color: #3a2a05; }
+  .pill.unlabeled { background: #4b5b75; color: var(--text); }
+  .tagGroup { margin-top: 14px; }
+  .tagGroup h3 { margin-bottom: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { background: #34445d; color: var(--text); padding: 8px 12px; font-size: .9rem; min-height: 44px; }
+  .chip.chosen { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .chip.custom { background: #3e5f74; }
+  .chip.custom.chosen { background: #9ee8ff; color: #103040; }
+  .customRow { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .customRow input { flex: 1 1 220px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .empty { border: 1px dashed #3a4d69; border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); }
+  .fileInfo { font-size: .84rem; color: #9fb1c8; overflow-wrap: anywhere; }
+  .shortcuts { font-size: .84rem; color: #9fb1c8; }
+  .fold { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; margin: 14px 0; }
+  .fold summary { cursor: pointer; padding: 16px 20px; min-height: 48px; display: flex; align-items: center; font-weight: 600; border-radius: 16px; }
+  .fold summary:hover { background: #22334d; }
+  .foldBody { padding: 0 20px 20px; }
+  .exportRow { display: flex; flex-wrap: wrap; gap: 10px; }
+  footer { color: #93a6bd; font-size: .84rem; padding: 10px 4px 30px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 760px) {
+    .sessionGrid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    main { padding: 12px 12px 36px; }
+    section, header { padding: 16px; border-radius: 14px; margin: 12px 0; }
+    h1 { font-size: 1.42rem; }
+    .pageNav { width: 100%; }
+    .pageNav a { flex: 1; min-height: 44px; }
+    .steps { grid-template-columns: 1fr 1fr; }
+    .actions button { flex: 1 1 140px; }
+    .fold summary { padding: 16px; }
+    .foldBody { padding: 0 16px 18px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>录音标注</h1>
+    <p class="muted">直接录音 · 试听/重录 · 保存后立即标注 · 只在本机处理</p>
+    <nav class="pageNav" aria-label="页面导航">
+      <a href="index.html">批量导入</a>
+      <a href="recording.html" aria-current="page">录音标注</a>
+    </nav>
+    <div class="notice">
+      录音与标签只在本机浏览器处理，<strong>不会上传</strong>。录音需要 HTTPS 或 localhost；`file://` 通常不可用。完整备份会包含声音，请妥善保管。
+    </div>
+    <div id="storageWarning" class="notice warn" hidden role="alert">
+      本机存储失败：当前进度只在内存中，请立即导出备份。
+    </div>
+    <p id="appMessage" class="muted" role="status">正在初始化……</p>
+  </header>
+
+  <section>
+    <h2>1. 会话</h2>
+    <div class="sessionGrid">
+      <label>会话名称
+        <input id="sessionName" type="text" maxlength="200" autocomplete="off" placeholder="例如：我的声鉴标注">
+      </label>
+      <label>标注代号（不是姓名或账号）
+        <input id="annotator" type="text" maxlength="200" autocomplete="off" placeholder="例如：listener-01">
+      </label>
+      <button id="loadSessionBtn" type="button">载入 / 切换会话</button>
+    </div>
+    <p id="sessionInfo" class="muted small">本会话录音 0 段 · 已确认 0 · 草稿 0</p>
+    <p class="muted small">与“批量导入”页共用同一会话：标签在 localStorage，录音在本机 IndexedDB。建议同一会话一次只开一个标签页。</p>
+  </section>
+
+  <section>
+    <h2>2. 录音</h2>
+    <ol id="steps" class="steps" aria-label="录音步骤">
+      <li data-step="consent">知情同意</li>
+      <li data-step="record">录音</li>
+      <li data-step="review">试听 / 重录</li>
+      <li data-step="save">保存并标注</li>
+    </ol>
+    <p class="muted small">录制本人声音，或确认录音中每位可识别参与者均已同意。麦克风权限被拒绝时，请在浏览器站点设置中允许后重试。</p>
+    <div class="inline"><input id="consentCheck" type="checkbox"><label for="consentCheck">我已向参与者说明用途、本地保存及导出包含声音，并取得录音同意。</label></div>
+    <div class="recordControls">
+      <button id="startRecordBtn" class="primary mobileButton" type="button">开始录音</button>
+      <button id="stopRecordBtn" class="mobileButton" type="button" disabled>停止录音</button>
+      <button id="saveRecordingBtn" class="mobileButton" type="button" disabled>保存录音并标注</button>
+      <button id="discardRecordingBtn" class="danger mobileButton" type="button" disabled>丢弃 / 重录</button>
+    </div>
+    <audio id="recordPreview" controls playsinline hidden></audio>
+    <p id="recordStatus" class="muted small" role="status">录音尚未开始。选择同意后录制。</p>
+  </section>
+
+  <section aria-label="录音标注">
+    <div class="clipHead">
+      <h2>3. 标注录音</h2>
+      <span id="clipStatus" class="pill unlabeled">—</span>
+    </div>
+    <div class="progressWrap">
+      <span id="progressText">0 / 0</span>
+      <div class="progressTrack"><span id="progressBar"></span></div>
+    </div>
+    <label class="recordPick" for="recordingSelect">选择待标注录音
+      <select id="recordingSelect" disabled>
+        <option value="">暂无录音</option>
+      </select>
+    </label>
+    <p id="recordingEmpty" class="muted small">还没有本机录音。先在上方录一段，保存后即可标注。</p>
+
+    <div id="emptyState" class="empty">还没有可标注的录音。<br>用上方按钮录一段，保存后即可在这里标注。</div>
+
+    <div id="clipView" hidden>
+      <p id="clipMeta" class="fileInfo"></p>
+      <audio id="audio" controls preload="metadata" hidden></audio>
+      <p id="playHint" class="muted small"></p>
+      <p id="reattachHint" class="muted small" hidden>无法读取本机录音数据：可能已被浏览器清理，或当前不是保存它的浏览器/站点。标签仍可查看，但无法试听。</p>
+
+      <div id="tagArea"></div>
+
+      <div class="tagGroup">
+        <h3>自定义标签（仅本条）</h3>
+        <div class="customRow">
+          <input id="customInput" type="text" maxlength="40" autocomplete="off" placeholder="输入圈子用语或自己的描述，例如：电台感">
+          <button id="addCustomBtn" type="button">添加标签</button>
+        </div>
+        <div id="customChips" class="chips" aria-live="polite"></div>
+      </div>
+
+      <label>备注（可选）
+        <textarea id="note" maxlength="1000" placeholder="记录这条录音给你的感觉；不要推断真实身份或年龄。"></textarea>
+      </label>
+
+      <label>声线状态（可选）
+        <select id="voiceMode">
+          <option value="unknown">不确定</option>
+          <option value="natural">我认为是自然声线</option>
+          <option value="acted">我认为有表演/变声</option>
+          <option value="processed">我认为有后期处理</option>
+        </select>
+      </label>
+
+      <div class="inline">
+        <input id="unsure" type="checkbox">
+        <label for="unsure">无法确定（勾选后也可以保留其它标签）</label>
+      </div>
+
+      <div class="actions">
+        <button id="prevBtn" type="button">← 上一条</button>
+        <button id="confirmBtn" type="button" class="primary">确认并下一条</button>
+        <button id="reopenBtn" type="button" hidden>重新编辑本条</button>
+        <button id="nextBtn" type="button">下一条 →</button>
+      </div>
+      <p id="confirmHint" class="muted small"></p>
+      <p id="clipMessage" class="okText" role="status"></p>
+    </div>
+  </section>
+
+  <details class="fold">
+    <summary>备份与导出（辅助）</summary>
+    <div class="foldBody">
+      <p class="muted small">
+        导出内容来自当前会话（包含批量导入页与录音页的全部记录），均标记为 <code>unreviewed</code> / <code>training_enabled=false</code>；JSON、CSV、会话备份不含音频。完整备份包含本页录音与标签。
+      </p>
+      <div class="exportRow">
+        <button id="exportJsonBtn" type="button">导出标注 JSON</button>
+        <button id="exportCsvBtn" type="button">导出标注 CSV</button>
+        <button id="exportBackupBtn" type="button">导出会话备份（仅标签）</button>
+        <button id="exportFullBackupBtn" type="button">导出完整备份（声音 + 标签）</button>
+      </div>
+      <p class="muted small">导入备份请前往 <a href="index.html">批量导入页</a> 的“导出与备份”区域。</p>
+      <p id="exportStatus" class="muted small" role="status"></p>
+    </div>
+  </details>
+
+  <footer>
+    本地娱乐标注工具 · 不连接后端、不自动打标签 · 词表版本 <span id="taxonomyVersion"></span> · 所有标签维持未审定。
+  </footer>
+</main>
+
+<script src="annotation-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const C = window.AnnotationCore;
+  const $ = (id) => document.getElementById(id);
+
+  const els = {
+    storageWarning: $('storageWarning'),
+    appMessage: $('appMessage'),
+    sessionName: $('sessionName'),
+    annotator: $('annotator'),
+    loadSessionBtn: $('loadSessionBtn'),
+    sessionInfo: $('sessionInfo'),
+    steps: $('steps'),
+    consentCheck: $('consentCheck'),
+    startRecordBtn: $('startRecordBtn'),
+    stopRecordBtn: $('stopRecordBtn'),
+    saveRecordingBtn: $('saveRecordingBtn'),
+    discardRecordingBtn: $('discardRecordingBtn'),
+    recordPreview: $('recordPreview'),
+    recordStatus: $('recordStatus'),
+    recordingSelect: $('recordingSelect'),
+    recordingEmpty: $('recordingEmpty'),
+    progressText: $('progressText'),
+    progressBar: $('progressBar'),
+    clipStatus: $('clipStatus'),
+    clipMeta: $('clipMeta'),
+    emptyState: $('emptyState'),
+    clipView: $('clipView'),
+    audio: $('audio'),
+    playHint: $('playHint'),
+    reattachHint: $('reattachHint'),
+    tagArea: $('tagArea'),
+    customInput: $('customInput'),
+    addCustomBtn: $('addCustomBtn'),
+    customChips: $('customChips'),
+    note: $('note'),
+    voiceMode: $('voiceMode'),
+    unsure: $('unsure'),
+    prevBtn: $('prevBtn'),
+    nextBtn: $('nextBtn'),
+    confirmBtn: $('confirmBtn'),
+    reopenBtn: $('reopenBtn'),
+    confirmHint: $('confirmHint'),
+    clipMessage: $('clipMessage'),
+    exportJsonBtn: $('exportJsonBtn'),
+    exportCsvBtn: $('exportCsvBtn'),
+    exportBackupBtn: $('exportBackupBtn'),
+    exportFullBackupBtn: $('exportFullBackupBtn'),
+    exportStatus: $('exportStatus'),
+    taxonomyVersion: $('taxonomyVersion')
+  };
+
+  const STORE_PREFIX = 'voice-label:';
+  const META_KEY = 'voice-label-meta';
+  const CONSENT_VERSION = 'recording-consent-v1';
+  const RECORDING_DB = 'voice-label-recordings-v1';
+  const STATUS_TEXT = { confirmed: '已确认', draft: '草稿', unlabeled: '未标注' };
+
+  const TAG_GROUPS = [
+    { group: 'parents', values: C.TAXONOMY.parents, title: '父类候选', hint: '可多选，也可以不选。' },
+    { group: 'variants', values: C.TAXONOMY.variants, title: '细分候选（未审定词表）', hint: '可多选；与父类不互斥。' },
+    { group: 'textures', values: C.TAXONOMY.texture_tags, title: '质感', hint: '可多选。' },
+    { group: 'styles', values: C.TAXONOMY.style_tags, title: '表达风格', hint: '可多选。' }
+  ];
+
+  let state = null;
+  let currentIndex = -1;
+  const attachedFiles = new Map();
+  let audioAttachedFingerprint = null;
+  let audioAttachedFile = null;
+  let currentObjectUrl = null;
+  let saveTimer = null;
+  let storageAvailable = true;
+  let recorder = null;
+  let recordingStream = null;
+  let recordingChunks = [];
+  let pendingRecording = null;
+  let previewUrl = null;
+  let recordedConsent = null;
+  let recorderFailed = false;
+  let recordingGeneration = 0;
+  let savingRecording = false;
+  const MAX_FULL_BACKUP_BYTES = 100 * 1024 * 1024;
+
+  els.taxonomyVersion.textContent = C.TAXONOMY.version;
+
+  // ---------- small helpers ----------
+
+  function recordingIndices() {
+    const out = [];
+    if (!state) return out;
+    state.clips.forEach(function (clip, index) {
+      if (clip.source === 'microphone') out.push(index);
+    });
+    return out;
+  }
+
+  function currentClip() {
+    if (!state) return null;
+    if (currentIndex < 0 || currentIndex >= state.clips.length) return null;
+    return state.clips[currentIndex];
+  }
+
+  function setAppMessage(text) { els.appMessage.textContent = text || ''; }
+  function setClipMessage(text) { els.clipMessage.textContent = text || ''; }
+  function setExportStatus(text, isError) {
+    els.exportStatus.textContent = text || '';
+    els.exportStatus.classList.toggle('errorText', Boolean(isError));
+    els.exportStatus.classList.toggle('okText', !isError);
+  }
+
+  function formatDuration(seconds) {
+    if (!Number.isFinite(seconds) || seconds <= 0) return '未知';
+    const total = Math.round(seconds);
+    const minutes = Math.floor(total / 60);
+    const rest = total % 60;
+    return minutes + ':' + String(rest).padStart(2, '0');
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+    return (value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)) + ' ' + units[unit];
+  }
+
+  function formatDateTime(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return String(iso);
+    return date.toLocaleString('zh-CN', { hour12: false });
+  }
+
+  function metaLine(clip) {
+    const parts = [];
+    parts.push('时长 ' + formatDuration(clip.duration_seconds));
+    parts.push('大小 ' + formatBytes(clip.size_bytes));
+    if (clip.confirmed && clip.confirmed_at) parts.push('确认于 ' + formatDateTime(clip.confirmed_at));
+    return parts.join(' · ');
+  }
+
+  function setStatusPill(element, clip) {
+    const status = clip ? C.statusOf(clip) : 'unlabeled';
+    element.textContent = clip ? STATUS_TEXT[status] : '—';
+    element.className = 'pill ' + status;
+  }
+
+  function updateSteps() {
+    const order = ['consent', 'record', 'review', 'save'];
+    let stage = 'consent';
+    if (savingRecording) stage = 'save';
+    else if (pendingRecording) stage = 'review';
+    else if (recorder && recorder.state === 'recording') stage = 'record';
+    else if (els.consentCheck.checked) stage = 'record';
+    const active = order.indexOf(stage);
+    els.steps.querySelectorAll('li').forEach(function (item, index) {
+      item.classList.toggle('done', index < active);
+      item.classList.toggle('active', index === active);
+    });
+  }
+
+  // ---------- storage ----------
+
+  function probeStorage() {
+    try {
+      const key = STORE_PREFIX + '__probe__';
+      localStorage.setItem(key, '1');
+      localStorage.removeItem(key);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function storageKey(name) { return STORE_PREFIX + (name || '默认会话'); }
+
+  function readMeta() {
+    try {
+      const raw = localStorage.getItem(META_KEY);
+      if (!raw) return {};
+      const meta = JSON.parse(raw);
+      return meta && typeof meta === 'object' ? meta : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function writeMeta(meta) {
+    try {
+      localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (error) {
+      // 主存储失败时已经会提示；这里不重复打扰。
+    }
+  }
+
+  function readStoredSession(name) {
+    if (!storageAvailable) return null;
+    try {
+      const raw = localStorage.getItem(storageKey(name));
+      if (!raw) return null;
+      return C.sanitizeSession(JSON.parse(raw));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function showStorageWarning(show) {
+    els.storageWarning.hidden = !show;
+  }
+
+  function saveState() {
+    if (!state) return false;
+    state.updated_at = new Date().toISOString();
+    if (!storageAvailable) {
+      showStorageWarning(true);
+      return false;
+    }
+    try {
+      localStorage.setItem(storageKey(state.name), JSON.stringify(state));
+      writeMeta({ lastSession: state.name, annotator: state.annotator });
+      showStorageWarning(false);
+      return true;
+    } catch (error) {
+      showStorageWarning(true);
+      return false;
+    }
+  }
+
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      saveTimer = null;
+      saveState();
+    }, 300);
+  }
+
+  function flushSave() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    return saveState();
+  }
+
+  // ---------- local recording storage ----------
+
+  function openRecordingDb() {
+    return new Promise(function (resolve, reject) {
+      if (!('indexedDB' in window)) { reject(new Error('当前浏览器不支持本地录音存储（IndexedDB）。')); return; }
+      const request = indexedDB.open(RECORDING_DB, 1);
+      request.onupgradeneeded = function () {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('recordings')) db.createObjectStore('recordings', { keyPath: 'id' });
+      };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { reject(request.error || new Error('无法打开本地录音库。')); };
+    });
+  }
+
+  async function putRecording(record) {
+    const db = await openRecordingDb();
+    return new Promise(function (resolve, reject) {
+      const tx = db.transaction('recordings', 'readwrite');
+      tx.objectStore('recordings').put(record);
+      tx.oncomplete = function () { db.close(); resolve(); };
+      tx.onerror = tx.onabort = function () { db.close(); reject(tx.error || new Error('录音保存失败，可能是本机空间不足。')); };
+    });
+  }
+
+  async function getRecording(id) {
+    const db = await openRecordingDb();
+    return new Promise(function (resolve, reject) {
+      let result = null;
+      let requestError = null;
+      let settled = false;
+      const tx = db.transaction('recordings', 'readonly');
+      const request = tx.objectStore('recordings').get(id);
+      request.onsuccess = function () { result = request.result || null; };
+      request.onerror = function () { requestError = request.error || new Error('读取录音失败'); };
+      tx.oncomplete = function () { db.close(); if (!settled) { settled = true; requestError ? reject(requestError) : resolve(result); } };
+      tx.onerror = tx.onabort = function () { db.close(); if (!settled) { settled = true; reject(tx.error || requestError || new Error('读取录音事务失败')); } };
+    });
+  }
+
+  async function allRecordings() {
+    const db = await openRecordingDb();
+    return new Promise(function (resolve, reject) {
+      let result = [];
+      let requestError = null;
+      let settled = false;
+      const tx = db.transaction('recordings', 'readonly');
+      const request = tx.objectStore('recordings').getAll();
+      request.onsuccess = function () { result = request.result || []; };
+      request.onerror = function () { requestError = request.error || new Error('读取录音列表失败'); };
+      tx.oncomplete = function () { db.close(); if (!settled) { settled = true; requestError ? reject(requestError) : resolve(result); } };
+      tx.onerror = tx.onabort = function () { db.close(); if (!settled) { settled = true; reject(tx.error || requestError || new Error('读取录音列表事务失败')); } };
+    });
+  }
+
+  async function writeRecordingChanges(putItems, deleteIds) {
+    const db = await openRecordingDb();
+    return new Promise(function (resolve, reject) {
+      let settled = false;
+      const tx = db.transaction('recordings', 'readwrite');
+      const store = tx.objectStore('recordings');
+      (putItems || []).forEach(function (record) { store.put(record); });
+      (deleteIds || []).forEach(function (id) { store.delete(id); });
+      tx.oncomplete = function () { db.close(); if (!settled) { settled = true; resolve(); } };
+      tx.onerror = tx.onabort = function () { db.close(); if (!settled) { settled = true; reject(tx.error || new Error('录音库事务失败')); } };
+    });
+  }
+
+  // ---------- recording ----------
+
+  async function startRecording() {
+    if (pendingRecording) {
+      els.recordStatus.textContent = '请先保存或丢弃当前待处理试听录音，再开始新录音。';
+      return;
+    }
+    if (state) {
+      const desiredName = C.cleanString(els.sessionName.value, 200) || '默认会话';
+      if (desiredName !== state.name) {
+        els.recordStatus.textContent = '会话名称已修改。请先点“载入 / 切换会话”，再开始录音。';
+        return;
+      }
+    }
+    if (!els.consentCheck.checked) { els.recordStatus.textContent = '请先确认已取得参与者同意，并说明本地保存与导出风险。'; return; }
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      els.recordStatus.textContent = '此浏览器环境不支持录音。请用 Android Chrome/Edge 经 HTTPS 或 localhost 打开，并确认麦克风权限。'; return;
+    }
+    els.startRecordBtn.disabled = true;
+    const generation = ++recordingGeneration;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (generation !== recordingGeneration) {
+        stream.getTracks().forEach(function (track) { track.stop(); });
+        return;
+      }
+      recordingStream = stream;
+      let mimeType = '';
+      ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].some(function (type) {
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) { mimeType = type; return true; }
+        return false;
+      });
+      recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType: mimeType } : undefined);
+      recordingChunks = [];
+      recorderFailed = false;
+      recordedConsent = { at: new Date().toISOString(), version: CONSENT_VERSION };
+      recordingStream.getTracks().forEach(function (track) {
+        track.addEventListener('ended', function () {
+          if (recorder && recorder.state !== 'inactive') {
+            recorderFailed = true;
+            recordingChunks = [];
+            els.recordStatus.textContent = '麦克风轨道意外中断；此段录音作废，请重新授权后再录。';
+            stopRecording();
+          }
+        }, { once: true });
+      });
+      recorder.ondataavailable = function (event) { if (event.data && event.data.size) recordingChunks.push(event.data); };
+      recorder.onerror = function () {
+        recorderFailed = true;
+        els.recordStatus.textContent = '录音发生错误，未保存此段录音。请检查麦克风权限后重试。';
+        recordingChunks = [];
+        pendingRecording = null;
+        if (recorder && recorder.state !== 'inactive') { try { recorder.stop(); } catch (error) { stopRecordingTracks(); } }
+        else stopRecordingTracks();
+        els.saveRecordingBtn.disabled = true;
+        els.discardRecordingBtn.disabled = true;
+        updateSteps();
+      };
+      recorder.onstop = function () {
+        stopRecordingTracks();
+        if (recorderFailed || !recordingChunks.length) {
+          recordingChunks = [];
+          pendingRecording = null;
+          els.recordPreview.hidden = true;
+          els.saveRecordingBtn.disabled = true;
+          els.discardRecordingBtn.disabled = true;
+          updateSteps();
+          return;
+        }
+        const type = recorder.mimeType || (recordingChunks[0] && recordingChunks[0].type) || 'audio/webm';
+        pendingRecording = new Blob(recordingChunks, { type: type });
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = URL.createObjectURL(pendingRecording);
+        els.recordPreview.src = previewUrl;
+        els.recordPreview.hidden = false;
+        els.saveRecordingBtn.disabled = false;
+        els.discardRecordingBtn.disabled = false;
+        els.startRecordBtn.disabled = true;
+        els.recordStatus.textContent = '录音已停止。请试听；满意后“保存录音并标注”，不满意可丢弃后重录。';
+        stopRecordingTracks();
+      };
+      recorder.start();
+      els.startRecordBtn.disabled = true;
+      els.stopRecordBtn.disabled = false;
+      els.recordStatus.textContent = '录音中……请在安静环境下采集。';
+      updateSteps();
+    } catch (error) {
+      stopRecordingTracks();
+      const msg = error && error.name === 'NotAllowedError' ? '麦克风权限被拒绝。请在浏览器站点设置中允许麦克风，再重试。' : '无法启动录音：' + (error.message || error.name || '未知错误');
+      els.recordStatus.textContent = msg;
+      updateSteps();
+    }
+  }
+
+  function stopRecordingTracks() {
+    if (recordingStream) recordingStream.getTracks().forEach(function (track) { track.stop(); });
+    recordingStream = null;
+    els.startRecordBtn.disabled = false;
+    els.stopRecordBtn.disabled = true;
+    updateSteps();
+  }
+
+  function stopRecording() {
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop(); } catch (error) { stopRecordingTracks(); }
+    } else stopRecordingTracks();
+  }
+
+  function interruptRecording() {
+    recordingGeneration += 1;
+    recorderFailed = true;
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop(); } catch (error) { /* tracks are stopped below */ }
+    }
+    stopRecordingTracks();
+    recordingChunks = [];
+  }
+
+  function discardRecording() {
+    pendingRecording = null;
+    recordingChunks = [];
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+    els.recordPreview.removeAttribute('src');
+    els.recordPreview.hidden = true;
+    els.saveRecordingBtn.disabled = true;
+    els.discardRecordingBtn.disabled = true;
+    els.startRecordBtn.disabled = false;
+    els.recordStatus.textContent = '录音已丢弃，可以重新录制。';
+    updateSteps();
+  }
+
+  async function saveRecordingAsClip() {
+    if (!pendingRecording || savingRecording) return;
+    savingRecording = true;
+    els.saveRecordingBtn.disabled = true;
+    els.discardRecordingBtn.disabled = true;
+    updateSteps();
+    const id = 'rec-' + (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+    const fingerprint = 'fallback:' + encodeURIComponent(id) + '|' + pendingRecording.size + '|' + Date.now();
+    const duration = Number.isFinite(els.recordPreview.duration) ? els.recordPreview.duration : null;
+    const record = { id: id, blob: pendingRecording, mime_type: pendingRecording.type, created_at: new Date().toISOString() };
+    try {
+      await putRecording(record);
+      const clip = C.createClip({ fingerprint: fingerprint, file_name: id + (pendingRecording.type.indexOf('ogg') >= 0 ? '.ogg' : pendingRecording.type.indexOf('mp4') >= 0 ? '.m4a' : '.webm'), size_bytes: pendingRecording.size, duration_seconds: duration, recording_id: id, source: 'microphone', consent_at: recordedConsent.at, consent_version: recordedConsent.version });
+      clip.heard_audio = true;
+      state.clips.push(clip);
+      attachedFiles.set(fingerprint, new File([pendingRecording], clip.file_name, { type: pendingRecording.type }));
+      currentIndex = state.clips.length - 1;
+      if (!saveState()) {
+        state.clips.pop();
+        attachedFiles.delete(fingerprint);
+        currentIndex = recordingIndices().length ? recordingIndices()[recordingIndices().length - 1] : -1;
+        try {
+          await writeRecordingChanges([], [id]);
+        } catch (rollbackError) {
+          els.recordStatus.textContent = '标签保存失败，且无法清理孤立录音：' + (rollbackError.message || '请检查本机存储并导出会话备份。');
+          renderAll();
+          return;
+        }
+        renderAll();
+        throw new Error('本机无法保存会话标签（localStorage 不可用）；录音已回滚，请启用本机存储后重试。');
+      }
+      renderAll();
+      discardRecording();
+      els.recordStatus.textContent = '录音与标签已关联并保存在本机。请在下方完成标注；完整备份可同时导出声音。';
+    } catch (error) {
+      els.recordStatus.textContent = '保存失败：' + (error.message || '本机空间可能不足。录音仍在试听区，请先导出/重试。');
+      els.saveRecordingBtn.disabled = false;
+      els.discardRecordingBtn.disabled = false;
+    } finally {
+      savingRecording = false;
+      updateSteps();
+    }
+  }
+
+  // ---------- audio ----------
+
+  function releaseAudioElement() {
+    audioAttachedFingerprint = null;
+    audioAttachedFile = null;
+    try {
+      els.audio.pause();
+      els.audio.removeAttribute('src');
+      els.audio.load();
+    } catch (error) { /* noop */ }
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
+  }
+
+  function resetAudio() {
+    releaseAudioElement();
+    els.audio.hidden = true;
+  }
+
+  async function syncAudio(clip) {
+    let file = clip ? attachedFiles.get(clip.fingerprint) : null;
+    if (!file && clip && clip.recording_id) {
+      try {
+        const saved = await getRecording(clip.recording_id);
+        if (saved && saved.blob) {
+          file = saved.blob;
+          attachedFiles.set(clip.fingerprint, file);
+        }
+      } catch (error) { setClipMessage('无法读取本机录音：' + (error.message || 'IndexedDB 错误')); }
+    }
+    if (!clip || !file) {
+      releaseAudioElement();
+      els.audio.hidden = true;
+      els.reattachHint.hidden = !clip;
+      return;
+    }
+    els.reattachHint.hidden = true;
+    els.audio.hidden = false;
+    if (audioAttachedFingerprint !== clip.fingerprint || audioAttachedFile !== file) {
+      releaseAudioElement();
+      currentObjectUrl = URL.createObjectURL(file);
+      els.audio.src = currentObjectUrl;
+      audioAttachedFingerprint = clip.fingerprint;
+      audioAttachedFile = file;
+      try { els.audio.load(); } catch (error) { /* noop */ }
+    }
+  }
+
+  function updatePlayHint(clip) {
+    if (!clip) { els.playHint.textContent = ''; return; }
+    if (!attachedFiles.has(clip.fingerprint)) {
+      els.playHint.textContent = '无法读取本机录音数据（可能已被浏览器清理）。标签仍可编辑。';
+      return;
+    }
+    if (clip.heard_audio) {
+      els.playHint.textContent = '这是一段本机录音，保存时已视为试听过，可直接标注并确认。';
+    } else {
+      els.playHint.textContent = '请完整播放到结尾后确认。';
+    }
+  }
+
+  function togglePlayback() {
+    const clip = currentClip();
+    if (!clip || !attachedFiles.has(clip.fingerprint)) {
+      setClipMessage('无法读取本机录音数据，无法播放。');
+      return;
+    }
+    if (els.audio.paused) {
+      const promise = els.audio.play();
+      if (promise && typeof promise.catch === 'function') {
+        promise.catch(function () { setClipMessage('浏览器无法播放这段录音。'); });
+      }
+    } else {
+      els.audio.pause();
+    }
+  }
+
+  // ---------- rendering ----------
+
+  function renderSessionInfo() {
+    const indices = recordingIndices();
+    const clips = indices.map(function (index) { return state.clips[index]; });
+    const counts = C.countStatuses(clips);
+    els.sessionInfo.textContent =
+      '本会话录音 ' + counts.total + ' 段 · 已确认 ' + counts.confirmed +
+      ' · 草稿 ' + counts.draft + ' · 未标注 ' + counts.unlabeled;
+    els.progressText.textContent = counts.confirmed + ' / ' + counts.total;
+    els.progressBar.style.width = counts.total
+      ? String(Math.round((counts.confirmed * 100) / counts.total)) + '%'
+      : '0%';
+  }
+
+  function renderRecordingSelect() {
+    const indices = recordingIndices();
+    els.recordingSelect.replaceChildren();
+    if (!indices.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = '暂无录音';
+      els.recordingSelect.append(option);
+      els.recordingSelect.disabled = true;
+      return;
+    }
+    indices.forEach(function (index) {
+      const clip = state.clips[index];
+      const status = C.statusOf(clip);
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = (index + 1) + '. ' + (clip.file_name || '未命名录音') +
+        ' · ' + STATUS_TEXT[status] + ' · ' + formatDuration(clip.duration_seconds);
+      els.recordingSelect.append(option);
+    });
+    els.recordingSelect.disabled = false;
+    const active = indices.includes(currentIndex) ? currentIndex : indices[0];
+    if (active !== currentIndex) currentIndex = active;
+    els.recordingSelect.value = String(currentIndex);
+  }
+
+  function renderTagGroups(clip) {
+    els.tagArea.replaceChildren();
+    TAG_GROUPS.forEach(function (definition) {
+      const block = document.createElement('div');
+      block.className = 'tagGroup';
+
+      const heading = document.createElement('h3');
+      heading.textContent = definition.title;
+      const hint = document.createElement('span');
+      hint.className = 'muted small';
+      hint.textContent = '　' + definition.hint;
+      heading.append(hint);
+      block.append(heading);
+
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+      const selected = new Set(clip.labels[definition.group] || []);
+      const known = new Set(definition.values);
+
+      function appendChip(value, fromOldBackup) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (selected.has(value) ? ' chosen' : '') + (fromOldBackup ? ' custom' : '');
+        chip.textContent = fromOldBackup ? value + ' ×' : value;
+        chip.disabled = clip.confirmed === true;
+        chip.setAttribute('aria-pressed', selected.has(value) ? 'true' : 'false');
+        if (fromOldBackup) chip.title = '当前词表中没有这个标签（可能来自旧备份），点击移除';
+        chip.addEventListener('click', function () {
+          const active = currentClip();
+          if (!active || active.fingerprint !== clip.fingerprint || active.confirmed) return;
+          C.toggleLabel(active, definition.group, value);
+          if (fromOldBackup) {
+            chip.remove();
+          } else {
+            const on = active.labels[definition.group].includes(value);
+            chip.classList.toggle('chosen', on);
+            chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+          }
+          afterAnnotationChange(active);
+        });
+        chips.append(chip);
+      }
+
+      definition.values.forEach(function (value) { appendChip(value, false); });
+      clip.labels[definition.group].forEach(function (value) {
+        if (!known.has(value)) appendChip(value, true);
+      });
+      block.append(chips);
+      els.tagArea.append(block);
+    });
+  }
+
+  function renderCustomChips(clip) {
+    els.customChips.replaceChildren();
+    if (!clip.labels.custom.length) {
+      const empty = document.createElement('span');
+      empty.className = 'muted small';
+      empty.textContent = '暂无自定义标签。';
+      els.customChips.append(empty);
+      return;
+    }
+    clip.labels.custom.forEach(function (tag) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip custom chosen';
+      chip.textContent = tag + ' ×';
+      chip.title = '点击移除这个自定义标签';
+      chip.disabled = clip.confirmed === true;
+      chip.addEventListener('click', function () {
+        const active = currentClip();
+        if (!active || active.fingerprint !== clip.fingerprint || active.confirmed) return;
+        C.removeCustomTag(active, tag);
+        renderCustomChips(active);
+        afterAnnotationChange(active);
+      });
+      els.customChips.append(chip);
+    });
+  }
+
+  async function renderClip() {
+    const clip = currentClip();
+    const hasRecordings = recordingIndices().length > 0;
+    els.recordingEmpty.hidden = hasRecordings;
+    if (!clip || clip.source !== 'microphone') {
+      els.clipView.hidden = true;
+      els.emptyState.hidden = false;
+      els.emptyState.textContent = hasRecordings
+        ? '请从上方选择一段录音。'
+        : '还没有可标注的录音。用上方按钮录一段，保存后即可在这里标注。';
+      setStatusPill(els.clipStatus, null);
+      resetAudio();
+      return;
+    }
+
+    els.emptyState.hidden = true;
+    els.clipView.hidden = false;
+    els.clipMeta.textContent = metaLine(clip);
+    els.clipMeta.title = clip.fingerprint;
+    setStatusPill(els.clipStatus, clip);
+
+    await syncAudio(clip);
+    renderTagGroups(clip);
+    renderCustomChips(clip);
+
+    els.note.value = clip.note || '';
+    els.voiceMode.value = clip.voice_mode || 'unknown';
+    els.unsure.checked = clip.unsure === true;
+
+    const locked = clip.confirmed === true;
+    els.note.disabled = locked;
+    els.voiceMode.disabled = locked;
+    els.unsure.disabled = locked;
+    els.customInput.disabled = locked;
+    els.addCustomBtn.disabled = locked;
+    els.reopenBtn.hidden = !locked;
+    els.confirmBtn.hidden = locked;
+
+    const indices = recordingIndices();
+    const position = indices.indexOf(currentIndex);
+    els.prevBtn.disabled = position <= 0;
+    els.nextBtn.disabled = position < 0 || position >= indices.length - 1;
+
+    updatePlayHint(clip);
+    updateConfirmState();
+    setClipMessage('');
+  }
+
+  function renderAll() {
+    if (!state) return;
+    renderSessionInfo();
+    renderRecordingSelect();
+    renderClip();
+  }
+
+  function updateConfirmState() {
+    const clip = currentClip();
+    if (!clip || clip.confirmed) {
+      els.confirmBtn.disabled = true;
+      els.confirmHint.textContent = '';
+      return;
+    }
+    const result = C.canConfirm(clip, state.annotator);
+    els.confirmBtn.disabled = !result.ok;
+    els.confirmHint.textContent = result.ok ? '条件满足，可以确认。' : result.reason;
+  }
+
+  function afterAnnotationChange(clip) {
+    clip.updated_at = new Date().toISOString();
+    setStatusPill(els.clipStatus, clip);
+    renderSessionInfo();
+    renderRecordingSelect();
+    updateConfirmState();
+    scheduleSave();
+  }
+
+  // ---------- navigation / actions ----------
+
+  function goTo(index) {
+    if (!state) return;
+    const indices = recordingIndices();
+    if (!indices.length || !indices.includes(index)) {
+      currentIndex = indices.length ? indices[0] : -1;
+    } else {
+      currentIndex = index;
+    }
+    renderRecordingSelect();
+    renderClip();
+  }
+
+  function goRelative(step) {
+    const indices = recordingIndices();
+    const position = indices.indexOf(currentIndex);
+    if (position < 0) return;
+    const next = indices[position + step];
+    if (typeof next === 'number') goTo(next);
+  }
+
+  function addCustomFromInput() {
+    const clip = currentClip();
+    if (!clip) return;
+    if (clip.confirmed) {
+      setClipMessage('本条已确认；如需修改请先“重新编辑本条”。');
+      return;
+    }
+    const result = C.addCustomTag(clip, els.customInput.value);
+    if (!result.added) {
+      setClipMessage(result.reason);
+      return;
+    }
+    els.customInput.value = '';
+    renderCustomChips(clip);
+    afterAnnotationChange(clip);
+    setClipMessage('已添加自定义标签：' + result.value);
+  }
+
+  function confirmCurrent() {
+    const clip = currentClip();
+    if (!clip) return;
+    state.annotator = C.cleanString(els.annotator.value, 200);
+    const result = C.canConfirm(clip, state.annotator);
+    if (!result.ok) {
+      setClipMessage(result.reason);
+      updateConfirmState();
+      return;
+    }
+
+    const confirmedIndex = currentIndex;
+    clip.confirmed = true;
+    clip.confirmed_at = new Date().toISOString();
+    clip.updated_at = clip.confirmed_at;
+
+    const indices = recordingIndices();
+    const position = indices.indexOf(confirmedIndex);
+    let next = -1;
+    for (let step = 1; step < indices.length; step += 1) {
+      const candidate = indices[(position + step) % indices.length];
+      if (candidate !== confirmedIndex && !state.clips[candidate].confirmed) {
+        next = candidate;
+        break;
+      }
+    }
+
+    saveState();
+    if (next >= 0) {
+      currentIndex = next;
+      renderAll();
+      setClipMessage('第 ' + (confirmedIndex + 1) + ' 条录音已确认，前进到第 ' + (next + 1) + ' 条。');
+    } else {
+      renderAll();
+      setClipMessage('第 ' + (confirmedIndex + 1) + ' 条录音已确认。本会话录音都已确认。');
+    }
+  }
+
+  function reopenCurrent() {
+    const clip = currentClip();
+    if (!clip || !clip.confirmed) return;
+    clip.confirmed = false;
+    clip.confirmed_at = null;
+    clip.updated_at = new Date().toISOString();
+    saveState();
+    renderAll();
+    setClipMessage('已重新打开本条，标签恢复可编辑；再次确认后会重新锁定。');
+  }
+
+  // ---------- sessions ----------
+
+  function switchToSession(rawName) {
+    if (recorder && recorder.state === 'recording') {
+      setAppMessage('正在录音，请先停止并保存或丢弃后再切换会话。');
+      if (state) els.sessionName.value = state.name;
+      return false;
+    }
+    if (pendingRecording) {
+      setAppMessage('有一段待保存的录音，请先“保存录音并标注”或“丢弃 / 重录”，再切换会话。');
+      if (state) els.sessionName.value = state.name;
+      return false;
+    }
+    const name = C.cleanString(rawName, 200) || '默认会话';
+    if (state && state.name === name) {
+      els.sessionName.value = name;
+      setAppMessage('当前已经是会话“' + name + '”。');
+      return false;
+    }
+    flushSave();
+    const loaded = readStoredSession(name);
+    if (loaded) {
+      state = loaded;
+    } else {
+      state = C.makeSession(name, els.annotator.value);
+    }
+    if (!state.annotator) state.annotator = C.cleanString(els.annotator.value, 200);
+    if (state.annotator) els.annotator.value = state.annotator;
+
+    els.sessionName.value = state.name;
+    attachedFiles.clear();
+    resetAudio();
+    const indices = recordingIndices();
+    currentIndex = indices.length ? indices[0] : -1;
+    saveState();
+    renderAll();
+
+    if (loaded) {
+      setAppMessage('已载入会话“' + state.name + '”（本机录音 ' + indices.length + ' 段）。');
+    } else {
+      setAppMessage('已新建会话“' + state.name + '”。可以开始录音。');
+    }
+    return true;
+  }
+
+  // ---------- export / backup ----------
+
+  function fileTimestamp() {
+    const date = new Date();
+    const pad = function (value) { return String(value).padStart(2, '0'); };
+    return date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate()) + '-' +
+      pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds());
+  }
+
+  function fileBase() {
+    const base = (state && state.name ? state.name : 'voice-label')
+      .replace(/[\\/:*?"<>|\r\n\t]+/g, '_').trim().slice(0, 80);
+    return base || 'voice-label';
+  }
+
+  function download(filename, content, mime) {
+    const blob = new Blob([content], { type: mime || 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function exportJson() {
+    if (!state.clips.length) {
+      setExportStatus('没有可导出的记录。', true);
+      return;
+    }
+    flushSave();
+    const dataset = C.buildDataset(state, new Date().toISOString());
+    download(fileBase() + '-label-observations-' + fileTimestamp() + '.json',
+      JSON.stringify(dataset, null, 2));
+    setExportStatus('已导出 ' + dataset.observations.length + ' 条标注（已确认 ' +
+      dataset.counts.confirmed + ' 条，草稿 ' + dataset.counts.draft + ' 条）。');
+  }
+
+  function exportCsv() {
+    if (!state.clips.length) {
+      setExportStatus('没有可导出的记录。', true);
+      return;
+    }
+    flushSave();
+    const csv = '\uFEFF' + C.buildCsv(state);
+    download(fileBase() + '-label-observations-' + fileTimestamp() + '.csv',
+      csv, 'text/csv;charset=utf-8');
+    setExportStatus('已导出 CSV（含表头 ' + C.CSV_COLUMNS.length + ' 列；标注均为 unreviewed）。');
+  }
+
+  function base64FromBlob(blob) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result).split(',')[1] || ''); };
+      reader.onerror = function () { reject(reader.error || new Error('无法读取音频')); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function exportFullBackup() {
+    if (!state.clips.length) { setExportStatus('没有可备份的会话记录。', true); return; }
+    try {
+      flushSave();
+      const recordings = await allRecordings();
+      const linked = new Set(state.clips.map(function (clip) { return clip.recording_id; }).filter(Boolean));
+      const byId = new Map(recordings.map(function (item) { return [item.id, item]; }));
+      const linkedIds = Array.from(linked);
+      const rawBytes = linkedIds.reduce(function (sum, id) {
+        const item = byId.get(id);
+        if (!item || !item.blob) throw new Error('找不到关联录音 ' + id + '，请检查本机录音库');
+        return sum + item.blob.size;
+      }, 0);
+      if (rawBytes > Math.floor(MAX_FULL_BACKUP_BYTES * 0.70)) throw new Error('关联录音总大小超过完整备份上限（约 70 MiB）。请分会话备份或使用仅标签备份。');
+      const payload = [];
+      for (const id of linkedIds) {
+        const item = byId.get(id);
+        payload.push({ id: item.id, mime_type: item.mime_type, created_at: item.created_at, data_base64: await base64FromBlob(item.blob) });
+      }
+      const backup = { schema: 'voice-label-full-backup-v1', exported_at: new Date().toISOString(), session: C.sanitizeSession(state), recordings: payload };
+      const json = JSON.stringify(backup);
+      if (new Blob([json]).size > MAX_FULL_BACKUP_BYTES) throw new Error('完整备份超过 100 MiB 上限；请分会话备份。');
+      download(fileBase() + '-full-backup-' + fileTimestamp() + '.json', json);
+      setExportStatus('完整备份已导出：' + payload.length + ' 段录音与标签。该文件可能很大且含敏感声音，请安全保管。');
+    } catch (error) { setExportStatus('完整备份失败：' + (error.message || '未知错误'), true); }
+  }
+
+  function exportBackup() {
+    if (!state.clips.length) {
+      setExportStatus('没有可备份的会话记录。', true);
+      return;
+    }
+    flushSave();
+    const backup = C.buildBackup(state, new Date().toISOString());
+    download(fileBase() + '-session-backup-' + fileTimestamp() + '.json',
+      JSON.stringify(backup, null, 2));
+    setExportStatus('已导出会话备份（只含元数据，不含音频文件）。可在批量导入页导入恢复。');
+  }
+
+  // ---------- events ----------
+
+  function bindEvents() {
+    els.sessionName.addEventListener('change', function () {
+      switchToSession(els.sessionName.value);
+    });
+    els.loadSessionBtn.addEventListener('click', function () {
+      switchToSession(els.sessionName.value);
+    });
+    els.annotator.addEventListener('input', function () {
+      if (!state) return;
+      state.annotator = C.cleanString(els.annotator.value, 200);
+      writeMeta({ lastSession: state.name, annotator: state.annotator });
+      scheduleSave();
+      updateConfirmState();
+    });
+
+    els.consentCheck.addEventListener('change', updateSteps);
+    els.startRecordBtn.addEventListener('click', startRecording);
+    els.stopRecordBtn.addEventListener('click', stopRecording);
+    els.saveRecordingBtn.addEventListener('click', saveRecordingAsClip);
+    els.discardRecordingBtn.addEventListener('click', discardRecording);
+
+    els.recordingSelect.addEventListener('change', function () {
+      const value = Number(els.recordingSelect.value);
+      if (Number.isFinite(value)) goTo(value);
+    });
+
+    els.prevBtn.addEventListener('click', function () { goRelative(-1); });
+    els.nextBtn.addEventListener('click', function () { goRelative(1); });
+    els.confirmBtn.addEventListener('click', confirmCurrent);
+    els.reopenBtn.addEventListener('click', reopenCurrent);
+
+    els.addCustomBtn.addEventListener('click', addCustomFromInput);
+    els.customInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addCustomFromInput();
+      }
+    });
+
+    els.unsure.addEventListener('change', function () {
+      const clip = currentClip();
+      if (!clip || clip.confirmed) {
+        els.unsure.checked = clip ? clip.unsure === true : false;
+        return;
+      }
+      clip.unsure = els.unsure.checked;
+      afterAnnotationChange(clip);
+    });
+
+    els.voiceMode.addEventListener('change', function () {
+      const clip = currentClip();
+      if (!clip || clip.confirmed) return;
+      const value = els.voiceMode.value;
+      clip.voice_mode = Object.prototype.hasOwnProperty.call(C.VOICE_MODES, value) ? value : 'unknown';
+      afterAnnotationChange(clip);
+    });
+
+    els.note.addEventListener('input', function () {
+      const clip = currentClip();
+      if (!clip || clip.confirmed) return;
+      const value = els.note.value.slice(0, 1000);
+      if (value === clip.note) return;
+      clip.note = value;
+      clip.updated_at = new Date().toISOString();
+      setStatusPill(els.clipStatus, clip);
+      renderSessionInfo();
+      renderRecordingSelect();
+      updateConfirmState();
+      scheduleSave();
+    });
+
+    els.audio.addEventListener('ended', function () {
+      const clip = currentClip();
+      if (!clip) return;
+      if (!clip.heard_audio) {
+        clip.heard_audio = true;
+        clip.updated_at = new Date().toISOString();
+        scheduleSave();
+      }
+      updatePlayHint(clip);
+      updateConfirmState();
+    });
+    els.audio.addEventListener('error', function () {
+      if (!audioAttachedFingerprint) return;
+      const clip = currentClip();
+      if (!clip) return;
+      els.playHint.textContent = '浏览器无法播放这段录音。标签仍可编辑。';
+      updateConfirmState();
+    });
+
+    els.exportJsonBtn.addEventListener('click', exportJson);
+    els.exportCsvBtn.addEventListener('click', exportCsv);
+    els.exportBackupBtn.addEventListener('click', exportBackup);
+    els.exportFullBackupBtn.addEventListener('click', exportFullBackup);
+
+    document.addEventListener('keydown', function (event) {
+      const target = event.target;
+      const tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+      if (target && (target.isContentEditable ||
+          ['input', 'textarea', 'select', 'button', 'a', 'audio'].includes(tag))) {
+        if (event.key === 'Escape' && target.blur) target.blur();
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        goRelative(-1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        goRelative(1);
+      } else if (event.code === 'Space') {
+        event.preventDefault();
+        togglePlayback();
+      }
+    });
+
+    window.addEventListener('pagehide', function () { interruptRecording(); flushSave(); });
+    window.addEventListener('beforeunload', function () { interruptRecording(); flushSave(); });
+  }
+
+  // ---------- init ----------
+
+  function init() {
+    storageAvailable = probeStorage();
+    const meta = readMeta();
+    const defaultName = '我的声鉴标注';
+    const rememberedName = C.cleanString(meta.lastSession, 200) || defaultName;
+    els.sessionName.value = rememberedName;
+    els.annotator.value = C.cleanString(meta.annotator, 200);
+
+    let loaded = null;
+    if (storageAvailable && C.cleanString(meta.lastSession, 200)) {
+      loaded = readStoredSession(rememberedName);
+    }
+    if (loaded) {
+      state = loaded;
+    } else {
+      state = C.makeSession(rememberedName, els.annotator.value);
+    }
+    if (!state.annotator) state.annotator = C.cleanString(els.annotator.value, 200);
+    if (state.annotator) els.annotator.value = state.annotator;
+    els.sessionName.value = state.name;
+
+    const indices = recordingIndices();
+    currentIndex = indices.length ? indices[0] : -1;
+    updateSteps();
+    renderAll();
+
+    if (indices.length) {
+      setAppMessage('已载入本机会话“' + state.name + '”的 ' + indices.length + ' 段录音。');
+    } else {
+      setAppMessage('先填写会话名称和标注代号，再选择同意并开始录音。');
+    }
+    if (!storageAvailable) showStorageWarning(true);
+    else writeMeta({ lastSession: state.name, annotator: state.annotator });
+  }
+
+  bindEvents();
+  init();
+})();
+</script>
+</body>
+</html>
