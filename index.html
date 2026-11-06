@@ -280,7 +280,7 @@
       <button id="exportBackupBtn" type="button">导出会话备份（仅标签）</button>
       <button id="exportFullBackupBtn" type="button">导出完整备份（声音 + 标签）</button>
       <button id="importBackupBtn" type="button">导入会话备份</button>
-      <button id="migrateLegacyBtn" type="button">预览旧父类迁移</button>
+      <button id="migrateLegacyBtn" type="button">查看旧父类手动归类说明</button>
       <input id="backupInput" class="hiddenInput" type="file" accept=".json,application/json">
     </div>
     <p id="exportStatus" class="muted small" role="status"></p>
@@ -382,10 +382,10 @@
   let currentIndex = -1;
   let queueFilter = 'all';
   let primaryFilter = 'all';
-  C.TAXONOMY.parents.concat('未归类').forEach(function (name) {
+  [...new Set([...C.domainPrimaries('male'), ...C.domainPrimaries('female'), ...C.TAXONOMY.parents]), '未归类'].forEach(function (name) {
     const option = document.createElement('option');
     option.value = name;
-    option.textContent = name === '未归类' ? name : name + '音';
+    option.textContent = name === '未归类' ? name : C.displayPrimaryName(name);
     els.primaryFilter.append(option);
   });
   els.primaryFilter.addEventListener('change', function () { primaryFilter = els.primaryFilter.value; renderQueue(); });
@@ -395,22 +395,17 @@
   let currentObjectUrl = null;
   let saveTimer = null;
   let storageAvailable = true;
+  const sessionRevisions = new Map();
+  let storageConflict = false;
   let importing = false;
   const MAX_FULL_BACKUP_BYTES = 100 * 1024 * 1024;
 
   els.taxonomyVersion.textContent = C.TAXONOMY.version;
   els.migrateLegacyBtn.addEventListener('click', function () {
-    const candidates = state.clips.filter((clip) => !clip.primary && !clip.confirmed && clip.labels.parents.length === 1 && C.TAXONOMY.parents.includes(clip.labels.parents[0]));
-    if (!candidates.length) {
-      setExportStatus('无可迁移草稿：旧已确认记录不会自动改动，请重新编辑后手动选择主音。');
-      return;
-    }
-    const preview = candidates.slice(0, 5).map((clip) => clip.file_name + ' → ' + clip.labels.parents[0] + '音').join('\n');
-    if (!window.confirm('预览：' + candidates.length + ' 条未确认、仅一个旧父类候选的记录可迁移。旧标签仍保留，编号将立即分配，不会复用。\n' + preview + (candidates.length > 5 ? '\n…' : '') + '\n确认执行？')) return;
-    candidates.forEach((clip) => C.setPrimary(state, clip, clip.labels.parents[0]));
-    if (!saveState()) { setExportStatus('迁移写入失败，请立即导出备份。', true); return; }
-    renderAll();
-    setExportStatus('已迁移 ' + candidates.length + ' 条草稿；旧标签仍保留。');
+    const candidates = state.clips.filter((clip) => !clip.confirmed && !clip.primary && clip.labels.parents.length);
+    setExportStatus(candidates.length
+      ? '找到 ' + candidates.length + ' 条未确认旧父类记录。请在队列中逐条打开，前往男声或女声页明确选择方向和主音；旧标签原样保留。已确认记录不会自动改动，不能凭旧父类推断方向。'
+      : '没有待手动归类的未确认旧父类记录。已确认旧记录保持原样；如需修改须先重新编辑。');
   });
 
   // ---------- small helpers ----------
@@ -484,6 +479,56 @@
   }
 
   function storageKey(name) { return STORE_PREFIX + (name || '默认会话'); }
+  function pendingJournal(name) { return localStorage.getItem(C.recoveryJournalKey(name)); }
+  function assertNoJournal(name) {
+    if (pendingJournal(name)) throw new Error('会话存在未解决的跨存储操作；普通保存/确认/导入已停止。请导出救援备份并检查诊断。');
+  }
+  function beginJournal(name, entry) {
+    assertNoJournal(name);
+    const key = C.recoveryJournalKey(name);
+    localStorage.setItem(key, JSON.stringify(entry)); // Quota errors must abort before either store changes.
+    if (localStorage.getItem(key) !== JSON.stringify(entry)) throw new Error('操作日志未能持久化。');
+  }
+  function clearJournal(name) { localStorage.removeItem(C.recoveryJournalKey(name)); }
+
+  async function recoverSessionUnlocked(name) {
+      const key = storageKey(name);
+      const raw = pendingJournal(name);
+      if (!raw) return '';
+      const parsed = C.parseRecoveryJournal(raw, name);
+      if (!parsed.ok) return '操作日志无效：' + parsed.reason + ' 禁止写入；请导出救援备份。';
+      const entry = parsed.entry;
+      try {
+        const current = localStorage.getItem(key);
+        if (entry.type === 'delete') {
+          const audioPresent = entry.recordingId ? Boolean(await getRecording(entry.recordingId)) : true;
+          const decision = C.recoveryDecision(entry, current, audioPresent);
+          if (decision.action !== 'restore-delete' || entry.before === undefined || entry.after === undefined) return '删除中断：' + (decision.reason || '日志缺少版本快照。') + ' 请导出救援备份并人工核对。';
+          if (current !== entry.before) localStorage.setItem(key, entry.before);
+          if (localStorage.getItem(key) !== entry.before) return '删除恢复验证失败。';
+          sessionRevisions.set(key, entry.before);
+        } else {
+          const decision = C.recoveryDecision(entry, current, false);
+          if (decision.action === 'block') return '导入中断：' + decision.reason;
+          if (decision.action === 'verify-import') {
+            for (const id of entry.ids) if (!await getRecording(id)) return '导入中断：录音缺失，禁止自动认定完成。';
+          } else if (decision.action === 'rollback-import') {
+            for (const id of entry.ids) {
+              if (await getRecording(id)) await writeRecordingChanges([], [id]);
+              if (await getRecording(id)) return '导入中断：暂存录音清理未验证。';
+            }
+          } else return '导入中断：未知恢复决定，保留日志。';
+          sessionRevisions.set(key, current);
+        }
+        clearJournal(name);
+        if (pendingJournal(name)) return '操作日志清理失败。';
+        return '已核验并恢复中断的' + (entry.type === 'delete' ? '删除' : '导入') + '操作。';
+      } catch (error) { return '恢复失败：' + (error.message || '存储错误') + '；请导出救援备份。'; }
+  }
+  async function recoverSession(name) {
+    if (!navigator.locks || typeof navigator.locks.request !== 'function') return '缺少跨标签页锁，无法恢复。';
+    return navigator.locks.request('voice-label:session:' + storageKey(name), { mode: 'exclusive' }, function () { return recoverSessionUnlocked(name); });
+  }
 
   function readMeta() {
     try {
@@ -508,6 +553,7 @@
     if (!storageAvailable) return null;
     try {
       const raw = localStorage.getItem(storageKey(name));
+      if (!sessionRevisions.has(storageKey(name))) sessionRevisions.set(storageKey(name), raw);
       if (!raw) return null;
       return C.sanitizeSession(JSON.parse(raw));
     } catch (error) {
@@ -517,42 +563,75 @@
 
   function showStorageWarning(show) {
     els.storageWarning.hidden = !show;
-    els.saveHint.textContent = show ? '保存失败：当前修改仅在内存，请立即备份。' : '已保存到本机 ' + new Date().toLocaleTimeString('zh-CN');
+    els.saveHint.textContent = show ? (storageConflict ? '保存已停止：其他标签页修改了此会话。请先导出备份，再刷新并核对。' : '保存失败：当前修改仅在内存，请立即备份。') : '已保存到本机 ' + new Date().toLocaleTimeString('zh-CN');
     els.saveHint.classList.toggle('errorText', show);
   }
 
-  function saveState() {
-    if (!state) return false;
-    state.updated_at = new Date().toISOString();
-    if (!storageAvailable) {
+  window.addEventListener('storage', function (event) {
+    if (state && event.key === storageKey(state.name) && sessionRevisions.has(event.key) && event.newValue !== sessionRevisions.get(event.key)) {
+      storageConflict = true;
+      showStorageWarning(true);
+    }
+  });
+
+  let saveInFlight = Promise.resolve();
+
+  function commitSessionUnderLock(session) {
+    const key = storageKey(session.name);
+    if (storageConflict || !storageAvailable) { showStorageWarning(true); return false; }
+    assertNoJournal(session.name);
+    const stored = localStorage.getItem(key);
+    if (stored !== (sessionRevisions.has(key) ? sessionRevisions.get(key) : null)) {
+      storageConflict = true;
       showStorageWarning(true);
       return false;
     }
-    try {
-      localStorage.setItem(storageKey(state.name), JSON.stringify(state));
-      writeMeta({ lastSession: state.name, annotator: state.annotator });
-      showStorageWarning(false);
-      return true;
-    } catch (error) {
-      showStorageWarning(true);
-      return false;
-    }
+    session.updated_at = new Date().toISOString();
+    const serialized = JSON.stringify(session);
+    localStorage.setItem(key, serialized);
+    sessionRevisions.set(key, serialized);
+    writeMeta({ lastSession: session.name, annotator: session.annotator });
+    showStorageWarning(false);
+    return true;
+  }
+
+  async function saveState() {
+    const session = state;
+    if (!session) return false;
+    const key = storageKey(session.name);
+    const perform = async function () {
+      if (!storageAvailable || storageConflict || !navigator.locks || typeof navigator.locks.request !== 'function') {
+        showStorageWarning(true);
+        return false;
+      }
+      try {
+        return await navigator.locks.request('voice-label:session:' + key, { mode: 'exclusive' }, async function () {
+          return commitSessionUnderLock(session);
+        });
+      } catch (error) {
+        showStorageWarning(true);
+        return false;
+      }
+    };
+    const result = saveInFlight.then(perform, perform);
+    saveInFlight = result;
+    return result;
   }
 
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
       saveTimer = null;
-      saveState();
+      void saveState();
     }, 300);
   }
 
-  function flushSave() {
+  async function flushSave() {
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    return saveState();
+    return await saveState();
   }
 
   // ---------- local recording storage ----------
@@ -747,7 +826,7 @@
       const details = document.createElement('details');
       details.open = true;
       const summary = document.createElement('summary');
-      summary.textContent = (group.name === '未归类' ? group.name : group.name + '音') + ' · ' + group.clips.length + ' 条';
+      summary.textContent = (group.name === '未归类' ? group.name : C.displayPrimaryName(group.name)) + ' · ' + group.clips.length + ' 条';
       details.append(summary);
       const nested = document.createElement('ol');
       nested.className = 'queueList';
@@ -803,6 +882,13 @@
         ? '本条已归入 ' + C.TAXONOMY.domains[clip.voice_domain].label + '；请前往 ' + (clip.voice_domain === 'male' ? '男声标注页' : '女声标注页') + ' 编辑主音。'
         : '本条尚未选择方向。请前往男声标注页或女声标注页，点选主音即完成分配。';
       els.domainArea.append(note);
+      ['male', 'female'].filter((domain) => !clip.voice_domain || clip.voice_domain === domain).forEach(function (domain) {
+        const link = document.createElement('a');
+        link.className = 'buttonLink';
+        link.href = 'labels-' + domain + '.html?session=' + encodeURIComponent(state.name) + '&clip=' + encodeURIComponent(clip.fingerprint);
+        link.textContent = '在' + (domain === 'male' ? '男声' : '女声') + '页打开本条 →';
+        els.domainArea.append(link);
+      });
       const heading = document.createElement('h3');
       heading.textContent = '主音 · ' + (C.primaryCode(clip) || (clip.legacy_primary ? '旧父类：' + clip.legacy_primary + '（仅兼容）' : '未归类'));
       els.primaryArea.append(heading);
@@ -830,15 +916,15 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'chip' + (clip.primary === name ? ' chosen' : '');
-      button.textContent = name + '音';
+      button.textContent = C.displayPrimaryName(name);
       button.setAttribute('role', 'radio');
       button.setAttribute('aria-checked', clip.primary === name ? 'true' : 'false');
       button.disabled = clip.confirmed;
-      button.addEventListener('click', function () {
+      button.addEventListener('click', async function () {
         if (currentClip() !== clip) return;
         if (!clip.voice_domain) C.setVoiceDomain(clip, PAGE_DOMAIN);
         if (!C.setPrimary(state, clip, name)) return;
-        if (!saveState()) setClipMessage('主音编号未能写入本机，请备份并检查存储。');
+        if (!await saveState()) setClipMessage('主音编号未能写入本机，请备份并检查存储。');
         renderPrimary(clip);
         renderTagGroups(clip);
         afterAnnotationChange(clip);
@@ -872,7 +958,7 @@
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'chip' + (selected.has(value) ? ' chosen' : '') + (fromOldBackup ? ' custom' : '');
-        chip.textContent = fromOldBackup ? value + ' ×' : value;
+        chip.textContent = (definition.group === 'variants' && !fromOldBackup ? C.displayPrimaryName(value) : value) + (fromOldBackup ? ' ×' : '');
         chip.disabled = clip.confirmed === true;
         chip.setAttribute('aria-pressed', selected.has(value) ? 'true' : 'false');
         if (fromOldBackup) chip.title = '当前词表中没有这个标签（可能来自旧备份），点击移除';
@@ -989,7 +1075,7 @@
       return;
     }
     const result = C.canConfirm(clip, state.annotator);
-    els.confirmBtn.disabled = !result.ok;
+    els.confirmBtn.disabled = !result.ok || Boolean(pendingJournal(state.name));
     els.confirmHint.textContent = result.ok ? '条件满足，可以确认。' : result.reason;
   }
 
@@ -1038,10 +1124,11 @@
     setClipMessage('已添加自定义标签：' + result.value);
   }
 
-  function confirmCurrent() {
+  async function confirmCurrent() {
     const clip = currentClip();
     if (!clip) return;
     state.annotator = C.cleanString(els.annotator.value, 200);
+    try { assertNoJournal(state.name); } catch (error) { setClipMessage(error.message); return; }
     const result = C.confirmClip(state, clip, state.annotator);
     if (!result.ok) {
       setClipMessage(result.reason);
@@ -1051,7 +1138,7 @@
 
     const confirmedIndex = currentIndex;
 
-    if (!saveState()) {
+    if (!await saveState()) {
       clip.confirmed = false;
       clip.confirmed_at = null;
       renderAll();
@@ -1079,65 +1166,70 @@
     }
   }
 
-  function reopenCurrent() {
+  async function reopenCurrent() {
     const clip = currentClip();
     if (!clip || !clip.confirmed) return;
     clip.confirmed = false;
     clip.confirmed_at = null;
     clip.updated_at = new Date().toISOString();
-    saveState();
+    if (!await saveState()) {
+      clip.confirmed = true;
+      renderAll();
+      setClipMessage('重新编辑未保存，请先导出备份并检查存储。');
+      return;
+    }
     renderAll();
     setClipMessage('已重新打开本条，标签恢复可编辑；再次确认后会重新锁定。');
   }
 
-  /**
-   * 删除当前音频：先确认，再从会话标签移除并落盘，成功后才删 IndexedDB 录音 blob。
-   * 若标签保存失败，不删除 blob（避免丢声音又留孤儿引用）；若之后 blob 删除失败，
-   * 标签已经移除但会提示用户手动清理，不静默吞掉错误。
-   */
   async function deleteCurrentClip() {
     const clip = currentClip();
     if (!clip) return;
     const label = (C.primaryCode(clip) || clip.legacy_primary || '未归类') + ' · ' + (clip.file_name || '未命名音频');
     if (!window.confirm('确定删除“' + label + '”？音频和标签都会从本机移除，且不可恢复。')) return;
-
+    if (!await flushSave()) { setClipMessage('删除已停止：当前会话未保存。'); return; }
+    const key = storageKey(state.name);
+    const name = state.name;
     const fingerprint = clip.fingerprint;
     const recordingId = clip.recording_id;
-    const originalIndex = currentIndex;
-    const attachedFile = attachedFiles.get(fingerprint);
-    const removed = C.removeClip(state, fingerprint);
-    if (!removed) return;
-    attachedFiles.delete(fingerprint);
-    if (!saveState()) {
-      state.clips.splice(Math.min(originalIndex, state.clips.length), 0, removed);
-      if (attachedFile) attachedFiles.set(fingerprint, attachedFile);
+    try {
+      await navigator.locks.request('voice-label:session:' + key, { mode: 'exclusive' }, async function () {
+        assertNoJournal(name);
+        const before = localStorage.getItem(key);
+        if (before !== sessionRevisions.get(key)) throw new Error('会话已被其他标签页修改。');
+        if (recordingId && !(await getRecording(recordingId))) throw new Error('关联录音已缺失；不删除标签。');
+        const next = C.sanitizeSession(JSON.parse(before));
+        C.removeClip(next, fingerprint);
+        next.updated_at = new Date().toISOString();
+        const after = JSON.stringify(next);
+        beginJournal(name, { type: 'delete', session: name, clip: clip, index: currentIndex, before: before, after: after, recordingId: recordingId });
+        localStorage.setItem(key, after);
+        if (localStorage.getItem(key) !== after) throw new Error('标签删除未验证。');
+        if (recordingId) {
+          await writeRecordingChanges([], [recordingId]);
+          if (await getRecording(recordingId)) throw new Error('录音删除未验证。');
+        }
+        sessionRevisions.set(key, after);
+        clearJournal(name);
+        if (pendingJournal(name)) throw new Error('操作日志清理失败。');
+        state = next;
+      });
+      attachedFiles.delete(fingerprint);
+      currentIndex = Math.min(currentIndex, state.clips.length - 1);
       renderAll();
-      setClipMessage('删除失败：标签未能写入本机，已恢复原状态，请检查存储后重试。');
-      return;
+      setClipMessage('已删除“' + label + '”。');
+    } catch (error) {
+      const diagnostic = await recoverSession(name);
+      state = readStoredSession(name) || state;
+      currentIndex = Math.min(currentIndex, state.clips.length - 1);
+      renderAll();
+      setClipMessage('删除未完成：' + (error.message || '存储错误') + '。' + diagnostic);
     }
-    if (recordingId) {
-      try {
-        await writeRecordingChanges([], [recordingId]);
-      } catch (error) {
-        state.clips.splice(Math.min(originalIndex, state.clips.length), 0, removed);
-        if (attachedFile) attachedFiles.set(fingerprint, attachedFile);
-        const restored = saveState();
-        currentIndex = originalIndex;
-        renderAll();
-        setClipMessage(restored
-          ? '删除失败：本机录音未能清理，标签和录音关联已恢复。'
-          : '删除失败：本机录音未能清理，当前页面已恢复标签；会话写入失败，请立即导出备份。');
-        return;
-      }
-    }
-    currentIndex = Math.min(originalIndex, state.clips.length - 1);
-    renderAll();
-    setClipMessage('已删除“' + label + '”（标签与本机录音均已清理）。');
   }
 
   // ---------- sessions ----------
 
-  function switchToSession(rawName) {
+  async function switchToSession(rawName) {
     if (importing) {
       setAppMessage('正在读取音频，请等导入完成后再切换会话。');
       if (state) els.sessionName.value = state.name;
@@ -1149,7 +1241,11 @@
       setAppMessage('当前已经是会话“' + name + '”。');
       return false;
     }
-    flushSave();
+    if (state && !await flushSave()) { setAppMessage('当前会话未保存，请先导出备份，避免切换时丢失修改。'); els.sessionName.value = state.name; return false; }
+    storageConflict = false;
+    let recovery = '';
+    try { recovery = await recoverSession(name); } catch (error) { recovery = '恢复检查失败：' + error.message; }
+    if (pendingJournal(name)) setAppMessage(recovery + '；仅可导出救援备份。');
     const loaded = readStoredSession(name);
     if (loaded) {
       state = loaded;
@@ -1163,7 +1259,11 @@
     attachedFiles.clear();
     resetAudio();
     currentIndex = state.clips.length ? 0 : -1;
-    saveState();
+    if (!await saveState()) {
+      setAppMessage(recovery + ' 目标会话未能保存；请导出救援备份并检查存储或其他标签页。');
+      renderAll();
+      return false;
+    }
     renderAll();
 
     if (loaded) {
@@ -1248,8 +1348,9 @@
     if (importing) return;
     const desiredName = C.cleanString(els.sessionName.value, 200) || '默认会话';
     if (!state || state.name !== desiredName) {
-      switchToSession(desiredName);
+      if (!await switchToSession(desiredName)) { setImportStatus('切换会话失败，导入已停止。'); return; }
     }
+    try { assertNoJournal(state.name); } catch (error) { setImportStatus(error.message); return; }
 
     const all = Array.from(fileList || []);
     if (!all.length) return;
@@ -1303,7 +1404,11 @@
       state.updated_at = new Date().toISOString();
       if ((wasEmpty && state.clips.length) || currentIndex < 0) currentIndex = 0;
 
-      saveState();
+      if (!await saveState()) {
+        renderAll();
+        setImportStatus('导入内容未能保存；请立即导出备份并检查存储。');
+        return;
+      }
       renderAll();
 
       const skipped = result.skipped.length + ignored + readFailed;
@@ -1347,29 +1452,29 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
   }
 
-  function exportJson() {
+  async function exportJson() {
     if (!state.clips.length) {
       setExportStatus('没有可导出的记录。', true);
       return;
     }
-    flushSave();
+    const saved = await flushSave();
     const dataset = C.buildDataset(state, new Date().toISOString());
     download(fileBase() + '-label-observations-' + fileTimestamp() + '.json',
       JSON.stringify(dataset, null, 2));
-    setExportStatus('已导出 ' + dataset.observations.length + ' 条标注（已确认 ' +
+    setExportStatus((saved ? '' : '当前会话未保存，仅供备份。') + '已导出 ' + dataset.observations.length + ' 条标注（已确认 ' +
       dataset.counts.confirmed + ' 条，草稿 ' + dataset.counts.draft + ' 条）。');
   }
 
-  function exportCsv() {
+  async function exportCsv() {
     if (!state.clips.length) {
       setExportStatus('没有可导出的记录。', true);
       return;
     }
-    flushSave();
+    const saved = await flushSave();
     const csv = '\uFEFF' + C.buildCsv(state);
     download(fileBase() + '-label-observations-' + fileTimestamp() + '.csv',
       csv, 'text/csv;charset=utf-8');
-    setExportStatus('已导出 CSV（含表头 ' + C.CSV_COLUMNS.length + ' 列；标注均为 unreviewed）。');
+    setExportStatus((saved ? '' : '当前会话未保存，仅供备份。') + '已导出 CSV（含表头 ' + C.CSV_COLUMNS.length + ' 列；标注均为 unreviewed）。');
   }
 
   function base64FromBlob(blob) {
@@ -1384,7 +1489,7 @@
   async function exportFullBackup() {
     if (!state.clips.length) { setExportStatus('没有可备份的会话记录。', true); return; }
     try {
-      flushSave();
+      const saved = await flushSave();
       const recordings = await allRecordings();
       const linked = new Set(state.clips.map(function (clip) { return clip.recording_id; }).filter(Boolean));
       const byId = new Map(recordings.map(function (item) { return [item.id, item]; }));
@@ -1404,24 +1509,26 @@
       const json = JSON.stringify(backup);
       if (new Blob([json]).size > MAX_FULL_BACKUP_BYTES) throw new Error('完整备份超过 100 MiB 上限；请分会话备份。');
       download(fileBase() + '-full-backup-' + fileTimestamp() + '.json', json);
-      setExportStatus('完整备份已导出：' + payload.length + ' 段录音与标签。该文件可能很大且含敏感声音，请安全保管。');
+      setExportStatus((saved ? '' : '当前会话未保存，仅供备份。') + '完整备份已导出：' + payload.length + ' 段录音与标签。该文件可能很大且含敏感声音，请安全保管。');
     } catch (error) { setExportStatus('完整备份失败：' + (error.message || '未知错误'), true); }
   }
 
-  function exportBackup() {
+  async function exportBackup() {
     if (!state.clips.length) {
       setExportStatus('没有可备份的会话记录。', true);
       return;
     }
-    flushSave();
+    const saved = await flushSave();
+    const rescue = Boolean(pendingJournal(state.name));
     const backup = C.buildBackup(state, new Date().toISOString());
-    download(fileBase() + '-session-backup-' + fileTimestamp() + '.json',
+    download(fileBase() + (rescue ? '-RESCUE-UNVERIFIED-' : '-session-backup-') + fileTimestamp() + '.json',
       JSON.stringify(backup, null, 2));
-    setExportStatus('已导出会话备份（只含元数据，不含音频文件）。刷新或换浏览器后可导入恢复。');
+    setExportStatus((rescue ? '救援备份（未核验，不能视为恢复完成）：' : saved ? '' : '当前会话未保存，仅供备份。') + '已导出会话备份（只含元数据，不含音频文件）。');
   }
 
   async function importBackup(file) {
     if (!file) return;
+    try { assertNoJournal(state.name); } catch (error) { setExportStatus(error.message, true); return; }
     if (importing) {
       setExportStatus('正在读取音频，请等导入完成后再导入备份。', true);
       return;
@@ -1433,6 +1540,7 @@
       if (candidate && candidate.schema === 'voice-label-full-backup-v1' && candidate.session && Array.isArray(candidate.recordings)) {
         const session = C.sanitizeSession(candidate.session);
         if (!session) { setExportStatus('完整备份中的会话结构无效。', true); return; }
+        assertNoJournal(session.name);
         const existing = readStoredSession(session.name);
         if (existing && existing.clips.length && !window.confirm('本机已有同名会话，导入会覆盖进度。继续吗？')) return;
         if (candidate.recordings.length > 1000) throw new Error('录音条目数超过 1000 条限制。');
@@ -1452,29 +1560,45 @@
           decoded.push({ id: record.id, blob: new Blob([bytes], { type: record.mime_type || 'application/octet-stream' }), mime_type: record.mime_type || '', created_at: record.created_at || new Date().toISOString() });
         }
         if (seenIds.size !== expectedIds.size) throw new Error('备份缺少与会话标签关联的录音数据。');
-        const previousRecords = [];
-        for (const id of seenIds) {
-          const previous = await getRecording(id);
-          if (previous) previousRecords.push(previous);
-        }
-        flushSave();
-        await putRecordings(decoded);
-        const previousState = state;
-        const previousIndex = currentIndex;
-        const previousName = els.sessionName.value;
+        if (!await flushSave()) throw new Error('当前会话未保存；请先导出备份，不会覆盖本机数据。');
+        if (!storageAvailable || !navigator.locks || typeof navigator.locks.request !== 'function') throw new Error('缺少跨标签页锁，完整备份导入已停止。');
+        const targetKey = storageKey(session.name);
+        const importOperation = saveInFlight.then(function () {
+          return navigator.locks.request('voice-label:session:' + targetKey, { mode: 'exclusive' }, async function () {
+            // No asynchronous gap between the revision check and the blob precheck except IDB itself;
+            // all cooperating session writers are excluded until the metadata commit or rollback.
+            if (storageConflict || localStorage.getItem(targetKey) !== (sessionRevisions.has(targetKey) ? sessionRevisions.get(targetKey) : null)) {
+              storageConflict = true;
+              showStorageWarning(true);
+              throw new Error('目标会话已被其他标签页修改，未导入录音。');
+            }
+            for (const id of seenIds) {
+              if (await getRecording(id)) throw new Error('录音库已有同编号录音；拒绝覆盖已有录音。');
+            }
+            const before = localStorage.getItem(targetKey);
+            const afterSession = C.sanitizeSession(session);
+            afterSession.updated_at = new Date().toISOString();
+            const after = JSON.stringify(afterSession);
+            beginJournal(session.name, { type: 'import', session: session.name, before: before, after: after, ids: Array.from(seenIds) });
+            try {
+              await putRecordings(decoded);
+              for (const id of seenIds) if (!(await getRecording(id))) throw new Error('暂存录音未验证。');
+              localStorage.setItem(targetKey, after);
+              if (localStorage.getItem(targetKey) !== after) throw new Error('会话提交未验证。');
+              sessionRevisions.set(targetKey, after);
+              clearJournal(session.name);
+              if (pendingJournal(session.name)) throw new Error('日志清理失败。');
+            } catch (error) {
+              const diagnostic = await recoverSessionUnlocked(session.name);
+              throw new Error((error.message || '导入失败') + '；' + diagnostic);
+            }
+          });
+        });
+        saveInFlight = importOperation.then(function () { return true; }, function () { return false; });
+        await importOperation;
         state = session;
         els.sessionName.value = state.name;
         currentIndex = state.clips.length ? 0 : -1;
-        if (!saveState()) {
-          state = previousState;
-          currentIndex = previousIndex;
-          els.sessionName.value = previousName;
-          await writeRecordingChanges(previousRecords, Array.from(seenIds).filter(function (id) {
-            return !previousRecords.some(function (record) { return record.id === id; });
-          }));
-          renderAll();
-          throw new Error('本机无法保存会话标签（localStorage 不可用）；录音导入已回滚，请启用本机存储后重试。');
-        }
         attachedFiles.clear(); resetAudio(); renderAll();
         setAppMessage('完整备份已恢复：' + decoded.length + ' 段本机录音与标签。');
         setExportStatus('完整备份已导入。'); return;
@@ -1484,6 +1608,7 @@
         setExportStatus('导入失败：' + parsed.reason, true);
         return;
       }
+      assertNoJournal(parsed.session.name);
       const existing = readStoredSession(parsed.session.name);
       if (existing && existing.clips.length) {
         const proceed = window.confirm('本机已有会话“' + parsed.session.name + '”的 ' +
@@ -1493,14 +1618,22 @@
           return;
         }
       }
-      flushSave();
+      if (!await flushSave()) throw new Error('当前会话未保存；请先导出备份，不会覆盖本机数据。');
+      const previousState = state;
+      const previousIndex = currentIndex;
+      const previousName = els.sessionName.value;
       state = parsed.session;
       els.sessionName.value = state.name;
+      currentIndex = state.clips.length ? 0 : -1;
+      if (!await saveState()) {
+        state = previousState;
+        currentIndex = previousIndex;
+        els.sessionName.value = previousName;
+        throw new Error('会话标签写入失败；原数据未覆盖，请导出备份并检查存储。');
+      }
       if (state.annotator) els.annotator.value = state.annotator;
       attachedFiles.clear();
       resetAudio();
-      currentIndex = state.clips.length ? 0 : -1;
-      saveState();
       renderAll();
       setAppMessage('会话备份已恢复。录音仍在本机时会自动连接；导入音频请重新选择相同文件/文件夹。');
       setExportStatus('已导入备份：' + state.clips.length + ' 条元数据；标注与确认状态已保留。');
@@ -1664,17 +1797,18 @@
       }
     });
 
-    window.addEventListener('pagehide', function () { flushSave(); });
-    window.addEventListener('beforeunload', function () { flushSave(); });
+    // Page teardown cannot await a Web Lock; this is best effort only.
+    window.addEventListener('pagehide', function () { void flushSave(); });
   }
 
   // ---------- init ----------
 
-  function init() {
+  async function init() {
     storageAvailable = probeStorage();
     const meta = readMeta();
     const defaultName = '我的声鉴标注';
     const rememberedName = C.cleanString(meta.lastSession, 200) || defaultName;
+    const recovery = storageAvailable ? await recoverSession(rememberedName) : '本机存储不可用，无法检查恢复日志。';
     els.sessionName.value = rememberedName;
     els.annotator.value = C.cleanString(meta.annotator, 200);
 
@@ -1700,7 +1834,8 @@
     } else {
       setAppMessage('先填写会话名称和标注代号，再导入本地音频。');
     }
-    if (!storageAvailable) showStorageWarning(true);
+    if (recovery) setAppMessage(recovery + (pendingJournal(state.name) ? ' 普通写入已封锁；请导出救援备份。' : ''));
+    if (!storageAvailable || !navigator.locks || typeof navigator.locks.request !== 'function' || pendingJournal(state.name)) showStorageWarning(true);
     else writeMeta({ lastSession: state.name, annotator: state.annotator });
   }
 
