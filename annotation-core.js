@@ -75,6 +75,24 @@
     return [...TAXONOMY.domains.male.primaries, ...TAXONOMY.domains.female.primaries];
   }
 
+  // 仅用于界面文字；会话、编号、导出始终使用原始词表值。
+  function displayPrimaryName(name) {
+    const known = [...allNewPrimaries(), ...domainVariants('male'), ...domainVariants('female'), ...TAXONOMY.domains.shared];
+    return known.includes(name) ? name + (name.endsWith('音') ? '' : '音') : (name || '');
+  }
+
+  // 同一个展示词可能出现在不同语境（女王音既是旧副音，也是新主音）。
+  // 只在明确的方向及标签组内解析；不凭展示名推断方向或修改旧记录。
+  function resolveContextualAlias(value, domain, group) {
+    const name = cleanString(value, 80);
+    const options = group === 'primaries' ? domainPrimaries(domain)
+      : group === 'variants' ? [...domainVariants(domain), ...TAXONOMY.domains.shared]
+      : [];
+    if (options.includes(name)) return name;
+    const matches = options.filter((canonical) => displayPrimaryName(canonical) === name);
+    return matches.length === 1 ? matches[0] : '';
+  }
+
   const LABEL_GROUPS = Object.freeze(['parents', 'variants', 'textures', 'styles', 'custom']);
   const VOICE_MODES = Object.freeze({
     unknown: '不确定',
@@ -550,7 +568,7 @@
    * 调用方应单独展示"其它/旧档"列表。
    */
   function groupByPrimary(clips, domain) {
-    const names = domain ? domainPrimaries(domain) : [...TAXONOMY.parents];
+    const names = domain ? domainPrimaries(domain) : [...new Set([...allNewPrimaries(), ...TAXONOMY.parents])];
     const groups = [...names, '未归类'].map((name) => ({ name, clips: [] }));
     for (const clip of Array.isArray(clips) ? clips : []) {
       // 排除已明确归入"另一方向"的条目；未选方向（voice_domain === ''）的新录音/导入音频
@@ -620,7 +638,7 @@
       voice_domain_label: clip.voice_domain ? TAXONOMY.domains[clip.voice_domain].label : '',
       voice_domain_source: clip.voice_domain_source || 'legacy_unassigned',
       primary_voice: clip.primary || '',
-      primary_voice_label: clip.primary ? clip.primary + '音' : '',
+      primary_voice_label: clip.primary ? displayPrimaryName(clip.primary) : '',
       primary_seq: clip.primary_seq_of === clip.primary && clip.primary ? clip.primary_seq : null,
       primary_code: primaryCode(clip),
       primary_is_legacy: clip.primary_is_legacy === true,
@@ -686,6 +704,57 @@
       counts,
       observations: safeSession.clips.map((clip) => observationFromClip(clip, safeSession))
     };
+  }
+
+  // A shared journal protocol: damaged or unfamiliar entries must remain in place.
+  function recoveryJournalKey(name) {
+    return 'voice-label-recovery-intent:' + encodeURIComponent(name || '默认会话');
+  }
+
+  function parseRecoveryJournal(raw, name) {
+    if (!raw) return { ok: false, reason: '没有待恢复操作。' };
+    let entry;
+    try { entry = typeof raw === 'string' ? JSON.parse(raw) : raw; }
+    catch (error) { return { ok: false, reason: '恢复日志 JSON 损坏。' }; }
+    if (!entry || entry.session !== name) return { ok: false, reason: '恢复日志会话不匹配。' };
+    if (entry.type === 'delete') {
+      if (!entry.clip || typeof entry.clip.fingerprint !== 'string' || !Number.isInteger(entry.index) || entry.index < 0 || typeof entry.recordingId !== 'string') return { ok: false, reason: '删除日志结构无效。' };
+    } else if (entry.type === 'import') {
+      if (!Array.isArray(entry.ids) || entry.ids.some((id) => typeof id !== 'string' || !id)) return { ok: false, reason: '导入日志结构无效。' };
+    } else if (entry.type === 'recording-save') {
+      if (typeof entry.before !== 'string' || typeof entry.after !== 'string' || entry.before === entry.after ||
+          typeof entry.recordingId !== 'string' || !entry.recordingId || typeof entry.fingerprint !== 'string' || !entry.fingerprint ||
+          !Number.isSafeInteger(entry.size) || entry.size <= 0 || typeof entry.mimeType !== 'string' || !entry.mimeType) return { ok: false, reason: '录音保存日志结构无效。' };
+      try {
+        const before = sanitizeSession(JSON.parse(entry.before));
+        const after = sanitizeSession(JSON.parse(entry.after));
+        if (!before || !after || before.name !== name || after.name !== name ||
+            before.clips.some((clip) => clip.recording_id === entry.recordingId || clip.fingerprint === entry.fingerprint) ||
+            after.clips.filter((clip) => clip.recording_id === entry.recordingId && clip.fingerprint === entry.fingerprint && clip.size_bytes === entry.size).length !== 1 ||
+            after.clips.length !== before.clips.length + 1 ||
+            before.clips.some((clip, index) => JSON.stringify(clip) !== JSON.stringify(after.clips[index]))) return { ok: false, reason: '录音保存快照无效。' };
+      } catch (error) { return { ok: false, reason: '录音保存快照无效。' }; }
+    } else return { ok: false, reason: '未知恢复日志类型。' };
+    return { ok: true, entry };
+  }
+
+  function recoveryDecision(entry, currentRaw, audioPresent) {
+    if (!entry || (entry.type !== 'delete' && entry.type !== 'import' && entry.type !== 'recording-save')) return { action: 'block', reason: '未知操作，禁止自动恢复。' };
+    if (entry.type === 'recording-save') {
+      if (currentRaw !== entry.before && currentRaw !== entry.after) return { action: 'block', reason: '会话版本已变化，禁止覆盖。' };
+      if (!audioPresent || audioPresent.id !== entry.recordingId || !(audioPresent.blob instanceof Blob) ||
+          audioPresent.blob.size !== entry.size || audioPresent.blob.type !== entry.mimeType || audioPresent.mime_type !== entry.mimeType)
+        return { action: 'block', reason: '录音 ID、大小或类型不匹配。' };
+      return { action: currentRaw === entry.before ? 'commit-recording-save' : 'verify-recording-save', reason: '' };
+    }
+    if (entry.type === 'delete') {
+      if (!audioPresent) return { action: 'block', reason: '录音缺失，保留日志并等待人工核对。' };
+      if (entry.before !== undefined && entry.after !== undefined && currentRaw !== entry.before && currentRaw !== entry.after) return { action: 'block', reason: '会话版本已变化，禁止覆盖。' };
+      return { action: 'restore-delete', reason: '' };
+    }
+    if (entry.before === undefined || entry.after === undefined) return { action: 'block', reason: '导入日志缺少版本快照，禁止自动清理。' };
+    if (currentRaw !== entry.before && currentRaw !== entry.after) return { action: 'block', reason: '会话版本已变化，禁止覆盖。' };
+    return { action: currentRaw === entry.after ? 'verify-import' : 'rollback-import', reason: '' };
   }
 
   function buildBackup(session, now) {
@@ -810,6 +879,8 @@
     domainPrimaries,
     domainVariants,
     allNewPrimaries,
+    displayPrimaryName,
+    resolveContextualAlias,
     createClip,
     mergeClipMeta,
     mergeImport,
@@ -835,6 +906,9 @@
     buildDataset,
     buildBackup,
     parseSessionBackup,
+    recoveryJournalKey,
+    parseRecoveryJournal,
+    recoveryDecision,
     csvEscape,
     buildCsv
   };
